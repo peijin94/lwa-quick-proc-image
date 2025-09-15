@@ -1,0 +1,76 @@
+# Configuration file for self-calibration pipeline
+# Modify these parameters to customize the self-calibration process
+
+# Container images
+container_images:
+  linc: "astronrd/linc:latest"      # Single container with DP3 and wsclean
+  dp3: "astronrd/linc:latest"       # Use linc for DP3 operations
+  wsclean: "astronrd/linc:latest"   # Use linc for wsclean operations
+
+# Self-calibration parameters
+selfcal_params:
+  iterations: 3                      # Number of self-calibration iterations
+  smoothness_constraint: 0.1        # Smoothness constraint for gain solutions
+  solver_type: "LBFGS"              # Solver type: LBFGS, CG, or SVD
+  max_iterations: 100               # Maximum iterations for solver
+  tolerance: 1.0e-3                 # Convergence tolerance
+  solution_interval: 0              # Solution interval (0 = per scan)
+  use_model_data: true              # Use MODEL_DATA column for calibration
+  model_column: "MODEL_DATA"        # Name of model column (filled by wsclean)
+
+# Imaging parameters for wsclean
+imaging_params:
+  image_size: [4096, 4096]          # Image size [width, height]
+  pixel_scale: "2arcmin"            # Pixel scale
+  weighting: "briggs"               # Weighting scheme: uniform, natural, briggs
+  briggs_robust: 0.5                # Briggs robust parameter
+  clean_iterations: 500             # Number of clean iterations (-niter)
+  mgain: 0.9                        # Major cycle gain (must be < 1 to fill MODEL_DATA)
+  multiscale: false                 # Disable multiscale cleaning
+  auto_threshold: false             # Disable auto threshold
+  auto_mask: false                  # Disable auto mask
+  mem_percentage: 80                # Memory percentage for MEM
+  enable_prediction: true           # Enable prediction mode for self-calibration
+
+# DP3 calibration parameters
+dp3_params:
+  ntime: 1                          # Number of time slots to process
+  write_full_res_flag: true         # Write full resolution flags
+  apply_smooth: true                # Apply smoothing to solutions
+  use_model_column: true            # Use model column for calibration
+  model_column: "MODEL_DATA"        # Name of model column (filled by wsclean)
+  calibration_type: "gain"          # Calibration type: gain, phase, or bandpass
+  solution_interval: 0              # Solution interval (0 = per scan)
+
+# Output configuration
+output_config:
+  base_output_dir: "./selfcal_output"
+  save_intermediate: true           # Save intermediate results
+  save_parsets: true                # Save DP3 parset files
+  save_logs: true                   # Save detailed logs
+  generate_report: true             # Generate JSON report
+  save_model_images: true           # Save model images for each iteration
+
+# Performance tuning
+performance_config:
+  parallel_processing: true         # Enable parallel processing if available
+  memory_limit: "80%"               # Memory limit for containers
+  cpu_limit: "all"                  # CPU limit for containers
+  timeout: 3600                     # Timeout in seconds for each step
+
+# Quality control thresholds
+quality_thresholds:
+  min_snr: 3.0                      # Minimum SNR for solutions
+  max_gain_error: 0.5               # Maximum gain error
+  min_solutions: 0.8                # Minimum fraction of successful solutions
+  convergence_threshold: 1.0e-3     # Convergence threshold
+  model_data_quality: true          # Check quality of MODEL_DATA column
+
+# Logging configuration
+logging_config:
+  default_level: "INFO"
+  file_level: "DEBUG"
+  console_level: "INFO"
+  log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  max_file_size: "100MB"
+  backup_count: 5
