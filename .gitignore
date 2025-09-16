@@ -1,0 +1,20 @@
+# python gitignore files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+*.pyzw
+*.pyzwz
+*.pyzwzw
+*.pyzwzwz
+
+# casapy gitignore files
+.ipynb_checkpoints/
+
+
+
+#casa 
+casa-*.log
