@@ -91,7 +91,7 @@ avg.freqstep = 3
     finally:
         parset_file.unlink(missing_ok=True)
 
-def run_wsclean_imaging(input_ms, output_prefix="image"):
+def run_wsclean_imaging(input_ms, output_prefix="image", **kwargs):
     """WSClean imaging"""
     print(f"Step 3: WSClean imaging - {input_ms}")
     start_time = time.time()
@@ -102,8 +102,7 @@ def run_wsclean_imaging(input_ms, output_prefix="image"):
     # Generate WSClean command using utils
     wsclean_cmd_str = wsclean_imaging.make_wsclean_cmd(
         msfile=input_path,  imagename=output_prefix,
-        auto_pix_fov=True,
-        niter=1000, mgain=0.9)
+        auto_pix_fov=True, **kwargs)
     
     # Split the command string into a list for subprocess
     wsclean_args = wsclean_cmd_str.split()[1:]  # Remove 'wsclean' from the beginning
@@ -137,7 +136,7 @@ steps = [gaincal]
 msout = /data/{input_path.name}_cal.ms
 
 gaincal.solint = 0
-gaincal.caltype = diagonal
+gaincal.caltype = diagonalphase
 gaincal.uvlambdamin = 10
 gaincal.maxiter = 100
 gaincal.tolerance = 1e-4
@@ -185,10 +184,15 @@ def run_applycal_dp3(input_ms,  output_ms, solution_fname="solution.h5",):
     
     parset_content = f"""msin = /data/{input_path.relative_to(common_parent)}
 msout = /data/{output_path.relative_to(common_parent)}
-steps = [applycal]
-applycal.type = applycal
-applycal.parmdb = /data/{solution_fname}
-applycal.correction = phase000
+steps = [applycalphase]
+
+applycalphase.type = applycal
+applycalphase.parmdb = /data/{solution_fname}
+applycalphase.correction = phase000
+
+#applycalamp.type = applycal
+#applycalamp.parmdb = /data/{solution_fname}
+#applycalamp.correction = amplitude000
 """
     
     parset_file = Path("applycal.parset")
@@ -243,13 +247,16 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc"):
     run_dp3_flag_avg(raw_ms, flagged_avg_ms)
     
     # Step 3: WSClean imaging (fills MODEL_DATA)
-    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image")
+    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=1000, mgain=0.9)
     
     # Step 4: DP3 gain calibration
     run_gaincal(flagged_avg_ms, solution_fname=solution_file.name)
     
     # Step 5: Apply DP3 calibration solutions
     run_applycal_dp3(flagged_avg_ms,final_ms, solution_fname=solution_file.name )
+
+    # Step 6: wsclean for source subtraction
+    run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=5000, mgain=0.9, multiscale=True)
     
     total_elapsed = time.time() - pipeline_start
     

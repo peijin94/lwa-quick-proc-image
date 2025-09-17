@@ -56,9 +56,6 @@ gaincal.usemodelcolumn = true
 gaincal.modelcolumn = MODEL_DATA
 gaincal.parmdb = /data/solution.h5
 
-
-gaincal.applycal.parmdb = /data/solution.h5
-gaincal.applycal.correction = phase
 """
 
 #applycal.parmdb = /data/solution.h5
