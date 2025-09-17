@@ -10,6 +10,7 @@ import os
 import time
 from pathlib import Path
 import wsclean_imaging
+from source_list import get_time_mjd, get_Sun_RA_DEC, mask_far_Sun_sources
 
 def run_casa_applycal(input_ms, gaintable):
     """Apply CASA bandpass calibration"""
@@ -240,7 +241,7 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc"):
     print(f"Output prefix: {output_prefix}")
     print("="*60)
     
-    # Step 1: CASA applycal
+    # Step 1: casatools applycal
     run_casa_applycal(raw_ms, gaintable)
     
     # Step 2: DP3 flagging and averaging
@@ -249,15 +250,22 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc"):
     # Step 3: WSClean imaging (fills MODEL_DATA)
     run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=1000, mgain=0.9)
     
-    # Step 4: DP3 gain calibration
+    # Step 4: DP3 gain calibration, applycal
     run_gaincal(flagged_avg_ms, solution_fname=solution_file.name)
-    
-    # Step 5: Apply DP3 calibration solutions
     run_applycal_dp3(flagged_avg_ms,final_ms, solution_fname=solution_file.name )
 
     # Step 6: wsclean for source subtraction
-    run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=5000, mgain=0.9, multiscale=True)
+    run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=1000, mgain=0.9)#, multiscale=True)
     
+    # Step 7: mask far Sun sources
+    time_mjd = get_time_mjd(str(final_ms))
+    print(f"Time MJD: {time_mjd}")
+    sun_ra, sun_dec = get_Sun_RA_DEC(time_mjd)
+    print(f"Sun RA: {sun_ra}, Sun DEC: {sun_dec}")
+    mask_far_Sun_sources( data_dir / f"{output_prefix}_image_source-sources.txt" , 
+        data_dir / f"{output_prefix}_image_source_masked-sources.txt", 
+        sun_ra, sun_dec, distance_deg=8.0)
+
     total_elapsed = time.time() - pipeline_start
     
     print("="*60)

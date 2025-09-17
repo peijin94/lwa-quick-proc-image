@@ -7,7 +7,7 @@ from pathlib import Path
 from astropy.coordinates import SkyCoord, EarthLocation, get_body
 from astropy.time import Time
 import astropy.units as u
-
+from casacore.tables import table
 
 def parse_wsclean_coordinates(ra_str, dec_str):
     """Parse WSClean coordinates to SkyCoord object."""
@@ -61,12 +61,19 @@ def distance_to_src_list(sourcelist_fname, ra_deg, dec_deg):
         sep = source['coord'].separation(target_coord)
         results.append({
             **source,  # Include all source data
-            'distance_deg': sep.deg,
-            'distance_arcmin': sep.arcmin,
-            'distance_arcsec': sep.arcsec
+            'distance_deg': sep.deg
         })
     
     return results
+
+
+def get_time_mjd(msname):
+    """Get the time in Modified Julian Days from a MS file."""
+    obs = table(msname+'/OBSERVATION', readonly=True)
+    start_mjd = obs.getcol('TIME_RANGE')[0][0] / 86400.0  
+    obs.close()
+    return start_mjd
+
 
 
 def get_Sun_RA_DEC(time_mjd, observatory='OVRO'):
@@ -99,4 +106,28 @@ def get_Sun_RA_DEC(time_mjd, observatory='OVRO'):
     return ra_deg, dec_deg
 
 
+def mask_far_Sun_sources(sourcelis_fname, fname_out, ra_deg, dec_deg, distance_deg=8.0):
+    """
+    read in a sourcelist file, generate a new sourcelist txt file with only the
+    source NOT within distance_deg from the Sun.
+    """
 
+    dist_to_sun = distance_to_src_list(sourcelis_fname, ra_deg, dec_deg)
+    sources_to_remove = [source['name'] for source in dist_to_sun if source['distance_deg'] <= distance_deg]
+    
+    with open(sourcelis_fname, 'r') as f:
+        lines = f.readlines()
+
+    # remove the sources from the output file
+    with open(fname_out, 'w') as f:
+        for i, line in enumerate(lines):
+            # Always include the header line (first line)
+            if i == 0:
+                f.write(line)
+                continue
+                
+            name = line.split(',')[0]
+            if name not in sources_to_remove:
+                f.write(line)
+                
+    return fname_out
