@@ -220,6 +220,53 @@ applycalphase.correction = phase000
     finally:
         parset_file.unlink(missing_ok=True)
 
+
+def run_dp3_subtract(input_ms, output_ms, source_list):
+    """DP3 subtract"""
+    print(f"Step 6: DP3 subtract - {input_ms} -> {output_ms}")
+    start_time = time.time()
+    
+    input_path = Path(input_ms)
+    output_path = Path(output_ms)
+    
+    # Find common parent directory
+    common_parent = Path(os.path.commonpath([
+        input_path.parent, output_path.parent
+    ]))
+    
+    parset_content = f"""msin = /data/{input_path.relative_to(common_parent)}
+msout = /data/{output_path.relative_to(common_parent)}
+steps = [subtract]
+subtract.type = subtract
+subtract.sourcedb = /data/{source_list}
+subtract.operation = subtract
+"""
+    
+    parset_file = Path("subtract.parset")
+    with open(parset_file, 'w') as f:
+        f.write(parset_content)
+    
+    cmd = [
+        "podman", "run", "--rm",
+        "-v", f"{common_parent}:/data",
+        "-v", f"{Path.cwd()}:/config",
+        "-w", "/config",
+        "astronrd/linc:latest",
+        "DP3", f"/config/{parset_file.name}"
+    ]
+    
+    try:
+        subprocess.run(cmd, check=True)
+        elapsed = time.time() - start_time
+        print(f"✓ DP3 subtract completed ({elapsed:.1f}s): {output_ms}")
+    except subprocess.CalledProcessError as e:
+        elapsed = time.time() - start_time
+        print(f"✗ DP3 subtract failed after {elapsed:.1f}s: {e}")
+        sys.exit(1)
+    finally:
+        parset_file.unlink(missing_ok=True)
+
+
 def run_pipeline(raw_ms, gaintable, output_prefix="proc"):
     """Run complete processing pipeline"""
     
@@ -265,6 +312,10 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc"):
     mask_far_Sun_sources( data_dir / f"{output_prefix}_image_source-sources.txt" , 
         data_dir / f"{output_prefix}_image_source_masked-sources.txt", 
         sun_ra, sun_dec, distance_deg=8.0)
+
+    # Step 8: DP3 subtract sources
+    run_dp3_subtract(final_ms, f"{output_prefix}_image_source_masked_subtracted.ms", 
+         data_dir / f"{output_prefix}_image_source_masked-sources.txt")
 
     total_elapsed = time.time() - pipeline_start
     
