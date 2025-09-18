@@ -226,20 +226,23 @@ def run_dp3_subtract(input_ms, output_ms, source_list):
     print(f"Step 6: DP3 subtract - {input_ms} -> {output_ms}")
     start_time = time.time()
     
-    input_path = Path(input_ms)
-    output_path = Path(output_ms)
+    input_path = Path(input_ms).resolve()
+    output_path = Path(output_ms).resolve()
+    source_path = Path(source_list).resolve()
     
     # Find common parent directory
     common_parent = Path(os.path.commonpath([
-        input_path.parent, output_path.parent
+        input_path.parent, output_path.parent, source_path.parent
     ]))
     
     parset_content = f"""msin = /data/{input_path.relative_to(common_parent)}
 msout = /data/{output_path.relative_to(common_parent)}
-steps = [subtract]
-subtract.type = subtract
-subtract.sourcedb = /data/{source_list}
-subtract.operation = subtract
+
+steps = [predict]
+
+predict.type = predict
+predict.sourcedb = /data/{source_path.relative_to(common_parent)}
+predict.operation = subtract
 """
     
     parset_file = Path("subtract.parset")
@@ -302,7 +305,7 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc"):
     run_applycal_dp3(flagged_avg_ms,final_ms, solution_fname=solution_file.name )
 
     # Step 6: wsclean for source subtraction
-    run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=1000, mgain=0.9)#, multiscale=True)
+    run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=3000, mgain=0.8)#, multiscale=True)
     
     # Step 7: mask far Sun sources
     time_mjd = get_time_mjd(str(final_ms))
@@ -314,8 +317,9 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc"):
         sun_ra, sun_dec, distance_deg=8.0)
 
     # Step 8: DP3 subtract sources
-    run_dp3_subtract(final_ms, f"{output_prefix}_image_source_masked_subtracted.ms", 
-         data_dir / f"{output_prefix}_image_source_masked-sources.txt")
+    subtracted_ms = data_dir / f"{output_prefix}_image_source_masked_subtracted.ms"
+    run_dp3_subtract(final_ms, str(subtracted_ms), 
+         str(data_dir / f"{output_prefix}_image_source_masked-sources.txt"))
 
     total_elapsed = time.time() - pipeline_start
     

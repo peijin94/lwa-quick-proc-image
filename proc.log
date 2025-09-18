@@ -8604,15 +8604,15 @@ Total flagged:     0.452%   (53905 out of 11928576 visibilities)
 Percentage of flagged visibilities detected per correlation:
   [53905,53905,53905,53905] out of 11928576 visibilities   [0%, 0%, 0%, 0%]
 
-Total DP3 time       2.49 real        32.6 user        1.69 system
-   11.4% (  285 ms) MsReader
-   56.1% ( 1398 ms) AOFlaggerStep flag.
-            1.6% (   22 ms) of it spent in shuffling data
-           90.6% ( 1266 ms) of it spent in calculating flags
-   22.2% (  554 ms) Averager avg.
-    9.3% (  231 ms) MSWriter msout.
+Total DP3 time       2.74 real       32.31 user           1 system
+   15.4% (  422 ms) MsReader
+   61.2% ( 1674 ms) AOFlaggerStep flag.
+            1.3% (   22 ms) of it spent in shuffling data
+           90.5% ( 1515 ms) of it spent in calculating flags
+   15.5% (  423 ms) Averager avg.
+    7.1% (  195 ms) MSWriter msout.
       0.0% (    0 ms) Creating task
-    129.7% (  299 ms) Writing (threaded)
+    149.4% (  292 ms) Writing (threaded)
  copying info and subtables ...
 Finished preparing output MS
 MsReader
@@ -8685,18 +8685,18 @@ Percentage of flagged visibilities detected per correlation:
   [0,0,0,0] out of 3976192 visibilities   [0%, 0%, 0%, 0%]
 0 missing time slots were inserted
 
-Total DP3 time       1.77 real       32.33 user        2.02 system
-   13.4% (  237 ms) MsReader
-   59.0% ( 1045 ms) GainCal gaincal.
-           10.9% (  113 ms) of it spent in predict
-           10.0% (  104 ms) of it spent in reordering visibility data
-           77.7% (  812 ms) of it spent in estimating gains and computing residuals
+Total DP3 time       1.65 real       25.07 user        1.25 system
+   10.9% (  180 ms) MsReader
+   50.3% (  828 ms) GainCal gaincal.
+            6.2% (   51 ms) of it spent in predict
+           11.4% (   94 ms) of it spent in reordering visibility data
+           80.4% (  666 ms) of it spent in estimating gains and computing residuals
             0.3% (    2 ms) of it spent in writing gain solutions to disk
         Converged: 1, stalled: 0, non converged: 0, failed: 0
         Iters converged: 13, stalled: 0, non converged: 0, failed: 0
-   17.7% (  313 ms) MSWriter msout.
+   23.6% (  388 ms) MSWriter msout.
       0.0% (    0 ms) Creating task
-     88.7% (  278 ms) Writing (threaded)
+     73.1% (  283 ms) Writing (threaded)
  copying info and subtables ...
 Finished preparing output MS
 MsReader
@@ -17286,12 +17286,75 @@ Percentage of visibilities flagged per channel:
   60-  63:       0%   0%   0%   0%
 Total flagged:     0.000%   (0 out of 3976192 visibilities)
 
-Total DP3 time       0.68 real        0.44 user        0.33 system
-   26.9% (  183 ms) MsReader
-   12.0% (   81 ms) OneApplyCal applycalphase.
-   57.7% (  392 ms) MSWriter msout.
+Total DP3 time       0.68 real         0.4 user        0.34 system
+   37.6% (  254 ms) MsReader
+   12.4% (   84 ms) OneApplyCal applycalphase.
+   46.6% (  316 ms) MSWriter msout.
       0.0% (    0 ms) Creating task
-     80.4% (  316 ms) Writing (threaded)
+     88.6% (  280 ms) Writing (threaded)
+ copying info and subtables ...
+Finished preparing output MS
+MsReader
+  input MS:           /data/20240519_173002_55MHz_proc_final.ms
+  band                0
+  startchan:          0  (0)
+  nchan:              64  (0)
+  ncorrelations:      4
+  nbaselines:         62128
+  first time:         2024/05/19/17:30:02
+  maximum time:       2024/05/19/17:30:02
+  ntimes:             1
+  time interval:      10.031
+  DATA column:        DATA
+  extra data columns: 
+  WEIGHT column:      WEIGHT_SPECTRUM
+  FLAG column:        FLAG
+  autoweight:         false
+Predict
+OnePredict predict.
+  sourcedb:                /data/proc_image_source_masked-sources.txt
+   number of patches:      444
+   patches clustered:      false
+   number of components:   444
+   absolute orientation:   false
+   all unpolarized:        true
+   correct time smearing:  false
+   correct freq smearing:  false
+  apply beam:              false
+  operation:               subtract
+MSWriter msout.
+  output MS:      /data/proc_image_source_masked_subtracted.ms
+  nchan:          64
+  ncorrelations:  4
+  nbaselines:     62128
+  ntimes:         1
+  time interval:  10.031
+  DATA column:    DATA
+  FLAG column:    FLAG
+  WEIGHT column:  WEIGHT_SPECTRUM
+  Compressed:     no
+  scalar flags:   true
+  use thread:     true
+Processing 1 time slots ...
+
+0%....10....20....30....40....50....60....70....80....90....100%
+Finishing processing ...
+
+NaN/infinite data flagged in reader
+===================================
+
+Percentage of flagged visibilities detected per correlation:
+  [0,0,0,0] out of 3976192 visibilities   [0%, 0%, 0%, 0%]
+0 missing time slots were inserted
+
+Total DP3 time        2.2 real        5.63 user        2.51 system
+    9.4% (  206 ms) MsReader
+   76.2% ( 1676 ms) OnePredict predict.
+          100.0% (32581976  s) of it spent in predict
+            0.0% (    0 ms) of it spent in apply beam
+   13.1% (  287 ms) MSWriter msout.
+      0.0% (    0 ms) Creating task
+     88.3% (  253 ms) Writing (threaded)
 ============================================================
 LWA Quick Processing Pipeline
 ============================================================
@@ -17302,22 +17365,24 @@ Output prefix: proc
 Step 1: CASA applycal - /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz.ms
 ✓ CASA applycal completed (4.8s)
 Step 2: DP3 flag/avg - /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz.ms -> /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_flagged_avg.ms
-✓ DP3 flag/avg completed (4.3s): /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_flagged_avg.ms
+✓ DP3 flag/avg completed (3.7s): /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_flagged_avg.ms
 Step 3: WSClean imaging - /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_flagged_avg.ms
 Successful readonly open of default-locked table /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_flagged_avg.ms/SPECTRAL_WINDOW: 14 columns, 1 rows
-✓ WSClean imaging completed (5.5s): proc_image*.fits
+✓ WSClean imaging completed (5.2s): proc_image*.fits
 Step 4: DP3 gaincal - /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_flagged_avg.ms
 ✓ DP3 gaincal completed (2.7s): solution.h5
 Step 5: DP3 applycal - /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_flagged_avg.ms -> /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_proc_final.ms
-✓ DP3 applycal completed (2.3s): /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_proc_final.ms
+✓ DP3 applycal completed (1.6s): /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_proc_final.ms
 Step 3: WSClean imaging - /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_proc_final.ms
 Successful readonly open of default-locked table /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_proc_final.ms/SPECTRAL_WINDOW: 14 columns, 1 rows
-✓ WSClean imaging completed (6.2s): proc_image_source*.fits
+✓ WSClean imaging completed (8.6s): proc_image_source*.fits
 Successful readonly open of default-locked table /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_proc_final.ms/OBSERVATION: 9 columns, 1 rows
 Time MJD: 60449.72913681995
 Sun RA: 56.655852948543526, Sun DEC: 19.905449887750855
+Step 6: DP3 subtract - /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_proc_final.ms -> /fast/peijinz/agile_proc/testdata/slow/proc_image_source_masked_subtracted.ms
+✓ DP3 subtract completed (3.2s): /fast/peijinz/agile_proc/testdata/slow/proc_image_source_masked_subtracted.ms
 ============================================================
-Pipeline completed successfully! (Total time: 26.6s)
+Pipeline completed successfully! (Total time: 31.0s)
 ============================================================
 Final calibrated MS: /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz_proc_final.ms
 Solution file: /fast/peijinz/agile_proc/testdata/slow/solution.h5
