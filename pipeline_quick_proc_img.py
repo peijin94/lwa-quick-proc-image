@@ -3,7 +3,6 @@
 Minimal pipeline script for LWA data processing
 Complete workflow: raw MS -> CASA applycal -> DP3 flag/avg -> wsclean -> gaincal -> applycal
 """
-
 import subprocess
 import sys
 import os
@@ -25,12 +24,17 @@ def run_casa_applycal(input_ms, gaintable):
     
     casa_script = f"""
 import casatools, casatasks
+from ovrolwasolar import flagging
 
 casatasks.applycal(
     vis='{input_ms}',
     gaintable='{gaintable}',
     applymode='calflag'
 )
+
+
+flagging.flag_bad_ants('{input_ms}')
+
 """
     
     # Write and run CASA script
@@ -81,7 +85,7 @@ flag.strategy = {strategy_file_path_str}
 flag.keepstatistics = false
 
 avg.type = averager
-avg.freqstep = 3
+avg.freqstep = 4
 """
     
     parset_file = Path("dp3_flag_avg.parset")
@@ -154,9 +158,9 @@ msout = /data/{input_path.name}_cal.ms
 
 gaincal.solint = 0
 gaincal.caltype = {cal_type}
-gaincal.uvlambdamin = 10
-gaincal.maxiter = 300
-gaincal.tolerance = 1e-5
+gaincal.uvlambdamin = 15
+gaincal.maxiter = 500
+gaincal.tolerance = 3e-3
 gaincal.usemodelcolumn = true
 gaincal.modelcolumn = MODEL_DATA
 gaincal.parmdb = /data/{solution_fname}
@@ -201,7 +205,7 @@ def run_applycal_dp3(input_ms,  output_ms, solution_fname="solution.h5", cal_ent
     
     parset_content = f"""msin = /data/{input_path.relative_to(common_parent)}
 msout = /data/{output_path.relative_to(common_parent)}
-steps = [applycal]
+steps = [applycal,count]
 
 applycal.type = applycal
 applycal.parmdb = /data/{solution_fname}
@@ -358,29 +362,34 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     print(f"Gaintable: {gaintable}")
     print(f"Output prefix: {output_prefix}")
     print("="*60)
-    
+
     # Step 1: casatools applycal
     run_casa_applycal(raw_ms, gaintable)
     
     # Step 2: DP3 flagging and averaging
-    run_dp3_flag_avg(raw_ms, flagged_avg_ms, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_opt_GH1.lua")
+    run_dp3_flag_avg(raw_ms, flagged_avg_ms)#, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_opt_GH1.lua")
     
-    # Step 3: WSClean imaging (fills MODEL_DATA)
-    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=1500, mgain=0.9,horizon_mask=0.1)
-    
-    # Step 4: DP3 gain calibration, applycal
-    run_gaincal(flagged_avg_ms, solution_fname=solution_file.name, cal_type="diagonalphase")
-    run_applycal_dp3(flagged_avg_ms,final_ms, solution_fname=solution_file.name, cal_entry="phase000")
 
+    # selfcal:
+    # Step 3: WSClean imaging (fills MODEL_DATA)
+    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=600, mgain=0.9,horizon_mask=5,auto_mask=False, auto_threshold=False)
+    # Step 4: DP3 gain calibration, applycal
+    run_gaincal(flagged_avg_ms, solution_fname=solution_file.name, cal_type="scalarphase")
+    run_applycal_dp3(flagged_avg_ms,caltmp_ms, solution_fname=solution_file.name, cal_entry="phase000")
+
+    run_wsclean_imaging(caltmp_ms, f"{output_prefix}_image_caltmp", niter=1000, mgain=0.9,horizon_mask=5,auto_mask=False, auto_threshold=False)
+    run_gaincal(caltmp_ms, solution_fname=solution_file.name, cal_type="scalarphase")
+    run_applycal_dp3(caltmp_ms,final_ms, solution_fname=solution_file.name, cal_entry="phase000")
+    
     # Step 6: wsclean for source subtraction
-    run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=5000, mgain=0.9,horizon_mask=0.1 )#, multiscale=True)
+    run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=6000, mgain=0.9,horizon_mask=0.1 )#, multiscale=True)
     
     # Step 7: mask far Sun sources
     time_mjd = get_time_mjd(str(final_ms))
     sun_ra, sun_dec = get_Sun_RA_DEC(time_mjd)
     mask_far_Sun_sources( data_dir / f"{output_prefix}_image_source-sources.txt" , 
         data_dir / f"{output_prefix}_image_source_masked-sources.txt", 
-        sun_ra, sun_dec, distance_deg=6.0)
+        sun_ra, sun_dec, distance_deg=8.0)
 
     # Step 8: DP3 subtract sources
     subtracted_ms = data_dir / f"{output_prefix}_image_source_masked_subtracted.ms"
@@ -407,7 +416,7 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     print(f"Images: {output_prefix}_image*.fits")
 
     run_wsclean_imaging(shifted_ms, f"{output_prefix}_image_source_sun_shifted", auto_pix_fov=False, 
-        niter=3000, mgain=0.8, size=512, scale='1.5arcmin',  multiscale=True)
+        niter=3000, mgain=0.8, size=512, scale='2arcmin')
 
 
     if plot_mid_steps:
@@ -417,6 +426,7 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
         plot_fits(data_dir / f"{output_prefix}_image_source_sun_shifted-image.fits")
         if DEBUG:
             plot_fits(data_dir / f"{output_prefix}_image_source_masked_subtracted-image.fits")
+            plot_fits(data_dir / f"{output_prefix}_image_caltmp-image.fits")
         from plot_solar_image import plot_solar_image
         plot_solar_image(data_dir / f"{output_prefix}_image_source_sun_shifted-image.fits")
 
