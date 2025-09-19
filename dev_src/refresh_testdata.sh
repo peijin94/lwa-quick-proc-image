@@ -1,5 +1,5 @@
-DIR_DATA=/fast/peijinz/agile_proc/testdata
-DIR_DATA_SRC=/fast/peijinz/agile_proc/testdata.tar # tar file of the testdata
+DIR_DATA=/fast/peijinz/agile_proc/testdata_v2
+DIR_DATA_SRC=/fast/peijinz/agile_proc/testdata_v2.tar # tar file of the testdata
 
 DIR_OUTPUT=/fast/peijinz/agile_proc/
 

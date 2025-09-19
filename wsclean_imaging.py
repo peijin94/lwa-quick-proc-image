@@ -33,7 +33,7 @@ def find_smallest_fftw_sz_number(n):
 
 
 def make_wsclean_cmd(msfile, imagename, size:int =4096, scale='2arcmin', fast_vis=False, field=None, 
-            predict=True, auto_pix_fov = False, telescope_size = 3200, im_fov=182*3600, pix_scale_factor=1.5,
+            predict=True, auto_pix_fov = False, telescope_size = 3200, im_fov=200*3600*2/np.pi, pix_scale_factor=1.5,
             **kwargs):  
     """
     Wrapper for imaging using wsclean, use the parameter of wsclean in args. 
@@ -55,7 +55,7 @@ def make_wsclean_cmd(msfile, imagename, size:int =4096, scale='2arcmin', fast_vi
     :param predict: if True, predict the model visibilities from the image
     :param auto_pix_fov: if True, automatically set the pixel scale to match the field of view
     :param telescope_size: size of the telescope in meters, default 3200 (OVRO-LWA)
-    :param im_fov: field of view of the image in arcseconds, default 182*3600asec (full sky+ 2deg)
+    :param im_fov: field of view of the image in arcseconds, default 182*3600*2/np.pi (full sky+ 2deg) scaling down by 2/pi
     :param j: number of threads, default 4
     :param mem: fraction of max memory usage, default 2 
     :param weight: weighting scheme, default uniform
