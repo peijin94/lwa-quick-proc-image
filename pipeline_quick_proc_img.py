@@ -26,6 +26,8 @@ def run_casa_applycal(input_ms, gaintable):
 import casatools, casatasks
 from ovrolwasolar import flagging
 
+flagging.flag_bad_ants('{input_ms}')
+
 casatasks.applycal(
     vis='{input_ms}',
     gaintable='{gaintable}',
@@ -33,7 +35,6 @@ casatasks.applycal(
 )
 
 
-flagging.flag_bad_ants('{input_ms}')
 
 """
     
@@ -77,6 +78,8 @@ def run_dp3_flag_avg(input_ms, output_ms, strategy_file=None):
     # Create DP3 parset
     parset_content = f"""msin = /data/{input_path.relative_to(common_parent)}
 msout = /data/{output_path.relative_to(common_parent)}
+
+msin.datacolumn=CORRECTED_DATA
 
 steps = [flag, avg]
 
@@ -153,7 +156,6 @@ def run_gaincal(input_ms, solution_fname="solution.h5", cal_type="diagonalphase"
     
     parset_content = f"""msin = /data/{input_path.name}
 steps = [gaincal]
-
 msout = /data/{input_path.name}_cal.ms
 
 gaincal.solint = 0
@@ -190,7 +192,7 @@ gaincal.parmdb = /data/{solution_fname}
     finally:
         parset_file.unlink(missing_ok=True)
 
-def run_applycal_dp3(input_ms,  output_ms, solution_fname="solution.h5", cal_entry="phase000"):
+def run_applycal_dp3(input_ms,  output_ms, solution_fname="solution.h5", cal_entry_lst=["phase"]):
     """Apply DP3 calibration solutions"""
     print(f"Step 5: DP3 applycal - {input_ms} -> {output_ms}")
     start_time = time.time()
@@ -205,13 +207,17 @@ def run_applycal_dp3(input_ms,  output_ms, solution_fname="solution.h5", cal_ent
     
     parset_content = f"""msin = /data/{input_path.relative_to(common_parent)}
 msout = /data/{output_path.relative_to(common_parent)}
-steps = [applycal,count]
+steps = [applycal]
 
-applycal.type = applycal
 applycal.parmdb = /data/{solution_fname}
-applycal.correction = {cal_entry}
-
 """
+
+    for cal_entry in cal_entry_lst:
+        parset_content += f"""
+applycal.steps = [{cal_entry}]
+applycal.{cal_entry}.correction={cal_entry}000
+"""
+
     
     parset_file = Path("applycal.parset")
     with open(parset_file, 'w') as f:
@@ -372,15 +378,17 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
 
     # selfcal:
     # Step 3: WSClean imaging (fills MODEL_DATA)
-    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=600, mgain=0.9,horizon_mask=5,auto_mask=False, auto_threshold=False)
-    # Step 4: DP3 gain calibration, applycal
-    run_gaincal(flagged_avg_ms, solution_fname=solution_file.name, cal_type="scalarphase")
-    run_applycal_dp3(flagged_avg_ms,caltmp_ms, solution_fname=solution_file.name, cal_entry="phase000")
+    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=800, mgain=0.9,horizon_mask=5,auto_mask=False, auto_threshold=False)
+    run_gaincal(flagged_avg_ms, solution_fname=solution_file.name, cal_type="diagonal")
+    run_applycal_dp3(flagged_avg_ms,caltmp_ms, solution_fname=solution_file.name, cal_entry_lst=["amplitude", "phase"])
+
+    #from casatasks import flagdata
+    #flagdata(final_ms, mode="rflag")
 
     run_wsclean_imaging(caltmp_ms, f"{output_prefix}_image_caltmp", niter=1000, mgain=0.9,horizon_mask=5,auto_mask=False, auto_threshold=False)
-    run_gaincal(caltmp_ms, solution_fname=solution_file.name, cal_type="scalarphase")
-    run_applycal_dp3(caltmp_ms,final_ms, solution_fname=solution_file.name, cal_entry="phase000")
-    
+    run_gaincal(caltmp_ms, solution_fname=solution_file.name, cal_type="diagonal")
+    run_applycal_dp3(caltmp_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["amplitude", "phase"])
+
     # Step 6: wsclean for source subtraction
     run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=6000, mgain=0.9,horizon_mask=0.1 )#, multiscale=True)
     
