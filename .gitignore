@@ -234,6 +234,9 @@ __marimo__/
 # logs
 *.log
 
+
+proc.log
+
 # images
 *.png
 
