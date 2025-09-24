@@ -19,13 +19,12 @@ DEBUG = True
 
 def run_casa_applycal(input_ms, gaintable):
     """Apply CASA bandpass calibration"""
-    print(f"Step 1: CASA applycal - {input_ms}")
+    print(f"Step : CASA applycal - {input_ms}")
     start_time = time.time()
     
     casa_script = f"""
 import casatools, casatasks
 from ovrolwasolar import flagging
-
 flagging.flag_bad_ants('{input_ms}')
 
 casatasks.applycal(
@@ -33,9 +32,6 @@ casatasks.applycal(
     gaintable='{gaintable}',
     applymode='calflag'
 )
-
-
-
 """
     
     # Write and run CASA script
@@ -56,7 +52,7 @@ casatasks.applycal(
 
 def run_dp3_flag_avg(input_ms, output_ms, strategy_file=None):
     """DP3 flagging and frequency averaging"""
-    print(f"Step 2: DP3 flag/avg - {input_ms} -> {output_ms}")
+    print(f"Step : DP3 flag/avg - {input_ms} -> {output_ms}")
     start_time = time.time()
     
     input_path = Path(input_ms)
@@ -117,7 +113,7 @@ avg.freqstep = 4
 
 def run_wsclean_imaging(input_ms, output_prefix="image", auto_pix_fov=True, **kwargs):
     """WSClean imaging"""
-    print(f"Step 3: WSClean imaging - {input_ms}")
+    print(f"Step : WSClean imaging - {input_ms}")
     start_time = time.time()
     
     input_path = Path(input_ms)
@@ -134,8 +130,7 @@ def run_wsclean_imaging(input_ms, output_prefix="image", auto_pix_fov=True, **kw
     cmd = [
         "podman", "run", "--rm", "-v", f"{input_dir}:/data", "-w", "/data",
         "astronrd/linc:latest",
-        "wsclean"
-    ] + wsclean_args + [f"/data/{input_path.name}"]
+        "wsclean" ] + wsclean_args + [f"/data/{input_path.name}"]
     
     try:
         subprocess.run(cmd, check=True)
@@ -148,21 +143,21 @@ def run_wsclean_imaging(input_ms, output_prefix="image", auto_pix_fov=True, **kw
 
 def run_gaincal(input_ms, solution_fname="solution.h5", cal_type="diagonalphase"):
     """DP3 gain calibration"""
-    print(f"Step 4: DP3 gaincal - {input_ms}")
+    print(f"Step : DP3 gaincal - {input_ms}")
     start_time = time.time()
     
     input_path = Path(input_ms)
     input_dir = input_path.parent
+#msout = /data/{input_path.name}_cal.ms
     
     parset_content = f"""msin = /data/{input_path.name}
 steps = [gaincal]
-msout = /data/{input_path.name}_cal.ms
-
+msout = .
 gaincal.solint = 0
 gaincal.caltype = {cal_type}
 gaincal.uvlambdamin = 15
 gaincal.maxiter = 500
-gaincal.tolerance = 3e-3
+gaincal.tolerance = 3e-5
 gaincal.usemodelcolumn = true
 gaincal.modelcolumn = MODEL_DATA
 gaincal.parmdb = /data/{solution_fname}
@@ -176,10 +171,8 @@ gaincal.parmdb = /data/{solution_fname}
         "podman", "run", "--rm",
         "-v", f"{input_dir}:/data",
         "-v", f"{Path.cwd()}:/config",
-        "-w", "/config",
-        "astronrd/linc:latest",
-        "DP3", f"/config/{parset_file.name}"
-    ]
+        "-w", "/config", "astronrd/linc:latest",
+        "DP3", f"/config/{parset_file.name}" ]
     
     try:
         subprocess.run(cmd, check=True)
@@ -194,7 +187,7 @@ gaincal.parmdb = /data/{solution_fname}
 
 def run_applycal_dp3(input_ms,  output_ms, solution_fname="solution.h5", cal_entry_lst=["phase"]):
     """Apply DP3 calibration solutions"""
-    print(f"Step 5: DP3 applycal - {input_ms} -> {output_ms}")
+    print(f"Step : DP3 applycal - {input_ms} -> {output_ms}")
     start_time = time.time()
     
     input_path = Path(input_ms)
@@ -211,14 +204,12 @@ steps = [applycal]
 
 applycal.parmdb = /data/{solution_fname}
 """
-
     for cal_entry in cal_entry_lst:
         parset_content += f"""
 applycal.steps = [{cal_entry}]
 applycal.{cal_entry}.correction={cal_entry}000
 """
-
-    
+ 
     parset_file = Path("applycal.parset")
     with open(parset_file, 'w') as f:
         f.write(parset_content)
@@ -227,10 +218,8 @@ applycal.{cal_entry}.correction={cal_entry}000
         "podman", "run", "--rm",
         "-v", f"{common_parent}:/data",
         "-v", f"{Path.cwd()}:/config",
-        "-w", "/config",
-        "astronrd/linc:latest",
-        "DP3", f"/config/{parset_file.name}"
-    ]
+        "-w", "/config", "astronrd/linc:latest",
+        "DP3", f"/config/{parset_file.name}"]
     
     try:
         subprocess.run(cmd, check=True)
@@ -246,7 +235,7 @@ applycal.{cal_entry}.correction={cal_entry}000
 
 def run_dp3_subtract(input_ms, output_ms, source_list):
     """DP3 subtract"""
-    print(f"Step 6: DP3 subtract - {input_ms} -> {output_ms}")
+    print(f"Step : DP3 subtract - {input_ms} -> {output_ms}")
     start_time = time.time()
     
     input_path = Path(input_ms).resolve()
@@ -262,7 +251,6 @@ def run_dp3_subtract(input_ms, output_ms, source_list):
 msout = /data/{output_path.relative_to(common_parent)}
 
 steps = [predict]
-
 predict.type = predict
 predict.sourcedb = /data/{source_path.relative_to(common_parent)}
 predict.operation = subtract
@@ -276,10 +264,8 @@ predict.operation = subtract
         "podman", "run", "--rm",
         "-v", f"{common_parent}:/data",
         "-v", f"{Path.cwd()}:/config",
-        "-w", "/config",
-        "astronrd/linc:latest",
-        "DP3", f"/config/{parset_file.name}"
-    ]
+        "-w", "/config", "astronrd/linc:latest",
+        "DP3", f"/config/{parset_file.name}"]
     
     try:
         subprocess.run(cmd, check=True)
@@ -323,8 +309,7 @@ phaseshift.phasecenter = [{sun_ra}deg, {sun_dec}deg]
         f.write(parset_content)
     
     work_dir = "/data"
-    mount_args = ["-v", f"{ms_abs.parent}:/data"]
-    
+    mount_args = ["-v", f"{ms_abs.parent}:/data"]    
     
     try:
         # Run DP3 in container
@@ -351,14 +336,12 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     """Run complete processing pipeline"""
     
     pipeline_start = time.time()
-    
     raw_path = Path(raw_ms)
     data_dir = raw_path.parent
     
     # Define intermediate file paths
     flagged_avg_ms = data_dir / f"{raw_path.stem}_flagged_avg.ms"
     solution_file = data_dir / "solution.h5"
-    caltmp_ms = data_dir / f"{raw_path.stem}_{output_prefix}_caltmp.ms"
     final_ms = data_dir / f"{raw_path.stem}_{output_prefix}_final.ms"
     
     print("="*60)
@@ -375,22 +358,15 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     # Step 2: DP3 flagging and averaging
     run_dp3_flag_avg(raw_ms, flagged_avg_ms)#, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_opt_GH1.lua")
     
-
     # selfcal:
     # Step 3: WSClean imaging (fills MODEL_DATA)
-    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=800, mgain=0.9,horizon_mask=5,auto_mask=False, auto_threshold=False)
+    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=800, mgain=0.9,horizon_mask=5,
+        save_source_list=False, auto_mask=False, auto_threshold=False)
     run_gaincal(flagged_avg_ms, solution_fname=solution_file.name, cal_type="diagonal")
-    run_applycal_dp3(flagged_avg_ms,caltmp_ms, solution_fname=solution_file.name, cal_entry_lst=["amplitude", "phase"])
-
-    #from casatasks import flagdata
-    #flagdata(final_ms, mode="rflag")
-
-    run_wsclean_imaging(caltmp_ms, f"{output_prefix}_image_caltmp", niter=1000, mgain=0.9,horizon_mask=5,auto_mask=False, auto_threshold=False)
-    run_gaincal(caltmp_ms, solution_fname=solution_file.name, cal_type="diagonal")
-    run_applycal_dp3(caltmp_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["amplitude", "phase"])
+    run_applycal_dp3(flagged_avg_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["amplitude", "phase"])
 
     # Step 6: wsclean for source subtraction
-    run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=6000, mgain=0.9,horizon_mask=0.1 )#, multiscale=True)
+    run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=2000, mgain=0.9,horizon_mask=0.1 )#, multiscale=True)
     
     # Step 7: mask far Sun sources
     time_mjd = get_time_mjd(str(final_ms))
@@ -406,13 +382,16 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     run_dp3_subtract(final_ms, subtracted_ms, 
          str(data_dir / f"{output_prefix}_image_source_masked-sources.txt"))
 
-    if DEBUG:
-        run_wsclean_imaging(subtracted_ms, f"{output_prefix}_image_source_masked_subtracted", niter=5000, mgain=0.9,horizon_mask=0.1)
+
 
     # step 9: phaseshift to sun
     shifted_ms = data_dir / f"{output_prefix}_image_source_sun_shifted.ms"
     print(f"Phaseshifting to sun from {subtracted_ms} to {shifted_ms}")
     phaseshift_to_sun(subtracted_ms, shifted_ms)
+
+    # final image
+    run_wsclean_imaging(shifted_ms, f"{output_prefix}_image_source_sun_shifted", auto_pix_fov=False, 
+        niter=2000, mgain=0.8, size=512, scale='1.5arcmin', save_source_list=False, weight='briggs -0.5')
 
     total_elapsed = time.time() - pipeline_start
     
@@ -423,8 +402,8 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     print(f"Solution file: {solution_file}")
     print(f"Images: {output_prefix}_image*.fits")
 
-    run_wsclean_imaging(shifted_ms, f"{output_prefix}_image_source_sun_shifted", auto_pix_fov=False, 
-        niter=3000, mgain=0.8, size=512, scale='2arcmin')
+    if DEBUG:
+        run_wsclean_imaging(subtracted_ms, f"{output_prefix}_image_source_masked_subtracted", niter=5000, mgain=0.9,horizon_mask=0.1)
 
 
     if plot_mid_steps:
@@ -434,7 +413,7 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
         plot_fits(data_dir / f"{output_prefix}_image_source_sun_shifted-image.fits")
         if DEBUG:
             plot_fits(data_dir / f"{output_prefix}_image_source_masked_subtracted-image.fits")
-            plot_fits(data_dir / f"{output_prefix}_image_caltmp-image.fits")
+            #plot_fits(data_dir / f"{output_prefix}_image_caltmp-image.fits")
         from plot_solar_image import plot_solar_image
         plot_solar_image(data_dir / f"{output_prefix}_image_source_sun_shifted-image.fits")
 

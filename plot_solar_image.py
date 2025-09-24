@@ -1,22 +1,17 @@
 #!/usr/bin/env python3
-"""
-Script to plot solar radio images from WSClean FITS files.
-"""
-
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
 import sys
 from pathlib import Path
 
-def plot_solar_image(fits_file, output_plot=None, zoom_size=200):
+def plot_solar_image(fits_file, output_plot=None):
     """
-    Plot solar radio image with full view and zoomed view.
+    Plot solar radio image with statistics from upper right corner.
     
     Args:
         fits_file (str): Path to FITS image file
         output_plot (str, optional): Output plot filename. If None, auto-generated
-        zoom_size (int): Size of zoom region around center (default: 200 pixels)
     
     Returns:
         str: Path to saved plot
@@ -30,7 +25,6 @@ def plot_solar_image(fits_file, output_plot=None, zoom_size=200):
     # Load the image
     with fits.open(fits_path) as hdul:
         data = hdul[0].data
-        header = hdul[0].header
     
     # Handle different data dimensions
     if data.ndim == 4:
@@ -40,53 +34,36 @@ def plot_solar_image(fits_file, output_plot=None, zoom_size=200):
     elif data.ndim != 2:
         raise ValueError(f"Unexpected data dimensions: {data.shape}")
     
-    print(f"Image shape: {data.shape}")
-    print(f"Min value: {np.nanmin(data):.3e}")
-    print(f"Max value: {np.nanmax(data):.3e}")
-    print(f"RMS (std): {np.nanstd(data):.3e}")
+    # Calculate statistics from upper right corner 20% × 20% area for RMS
+    height, width = data.shape
+    corner_size_y = int(height * 0.2)
+    corner_size_x = int(width * 0.2)
     
-    # Calculate statistics
-    clean_data = data[~np.isnan(data)]
-    if len(clean_data) > 0:
-        peak_val = np.max(clean_data)
-        rms_val = np.nanstd(data)
-        dynamic_range = peak_val / rms_val if rms_val > 0 else 0
-        
-        print(f"Peak brightness: {peak_val:.3e}")
-        print(f"Dynamic range: {dynamic_range:.1f}")
-        
-        # Find peak location
-        peak_loc = np.unravel_index(np.nanargmax(data), data.shape)
-        print(f"Peak location (pixels): {peak_loc}")
+    # Upper right corner region for RMS calculation
+    corner_data = data[-corner_size_y:, -corner_size_x:]
+    corner_rms = np.nanstd(corner_data)
     
-    # Create plot
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    # Overall statistics using corner RMS
+    peak_val = np.nanmax(data)
+    rms_val = corner_rms  # Use corner RMS instead of overall RMS
+    dynamic_range = peak_val / rms_val if rms_val > 0 else 0
+
+    # Create single plot
+    fig, ax = plt.subplots(1, 1, figsize=(6, 5))
     
-    # Full image
-    im1 = ax1.imshow(data, origin='lower', cmap='hot', aspect='equal', vmin=0, vmax=np.nanmax(data))
-    ax1.contour(data, levels=[-0.05*np.nanmax(data),0.05*np.nanmax(data)], colors='white', linewidths=0.5)
-    ax1.set_title('Sun')
-    ax1.set_xlabel('X pix')
-    ax1.set_ylabel('Y pix')
+    # Plot image
+    im = ax.imshow(data, origin='lower', cmap='hot', aspect='equal')
+    ax.contour(data, levels=[-0.05*np.nanmax(data),0.05*np.nanmax(data)], colors='white', linewidths=0.5)
+    plt.setp(ax, xlabel='X pixels', ylabel='Y pixels')
     
-    # Zoomed view around center
-    center_y, center_x = data.shape[0] // 2, data.shape[1] // 2
-    y_start = max(0, center_y - zoom_size)
-    y_end = min(data.shape[0], center_y + zoom_size)
-    x_start = max(0, center_x - zoom_size)
-    x_end = min(data.shape[1], center_x + zoom_size)
-    
-    zoom_data = data[y_start:y_end, x_start:x_end]
-    im2 = ax2.imshow(zoom_data, origin='lower', cmap='hot', aspect='equal', vmin=0, vmax=np.nanmax(zoom_data))
-    ax2.contour(zoom_data, levels=[-0.05*np.nanmax(zoom_data),0.05*np.nanmax(zoom_data)], colors='white', linewidths=0.5)
-    ax2.set_title(f'(Zoomed)')
-    ax2.set_xlabel('X pix')
-    ax2.set_ylabel('Y pix')
-    
-    # Add text with statistics
-    stats_text = f'Peak: {peak_val:.2e} Jy/beam\nRMS: {rms_val:.2e} Jy/beam\nDR: {dynamic_range:.1f}'
-    ax1.text(0.02, 0.98, stats_text, transform=ax1.transAxes, 
-             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax, shrink=0.8, label='Brightness (Jy/beam)')
+
+    # Add overall statistics text (using corner RMS for calculation)
+    stats_text = f'Peak: {peak_val:.2e} Jy/beam\nRMS: {rms_val:.2e} Jy/beam\nDR: {dynamic_range:.1f} \nmax/(-min): {-peak_val/np.nanmin(data):.1f}'
+    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
+            verticalalignment='top', horizontalalignment='left',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.9), fontsize=10)
     
     plt.tight_layout()
     
@@ -106,17 +83,15 @@ def plot_solar_image(fits_file, output_plot=None, zoom_size=200):
 def main():
     """Main function for command line usage."""
     if len(sys.argv) < 2:
-        print("Usage: python plot_solar_image.py <fits_file> [output_plot] [zoom_size]")
-        print("Example: python plot_solar_image.py sun_img-image.fits sun_plot.png 150")
+        print("Usage: python plot_solar_image.py <fits_file> [output_plot]")
+        print("Example: python plot_solar_image.py sun_img-image.fits sun_plot.png")
         sys.exit(1)
     
     fits_file = sys.argv[1]
     output_plot = sys.argv[2] if len(sys.argv) > 2 else None
-    zoom_size = int(sys.argv[3]) if len(sys.argv) > 3 else 200
     
     try:
-        plot_path = plot_solar_image(fits_file, output_plot, zoom_size)
-        print(f"\nPlot created successfully: {plot_path}")
+        plot_path = plot_solar_image(fits_file, output_plot)
         
     except Exception as e:
         print(f"Error: {e}")
