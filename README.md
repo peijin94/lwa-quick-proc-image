@@ -45,15 +45,14 @@ Key parameters in `pipeline_quick_proc_img.py`:
 
 ## Container Usage
 
-All DP3 and WSClean operations use the `astronrd/linc:latest` container:
+All DP3 and WSClean operations use the `astronrd/linc:latest` container with simplified mounting:
 
 ```bash
 # Test container setup
 podman pull astronrd/linc:latest
 
-# Run individual steps
-python3 script/run_dp3_flag_avg.py input.ms output.ms
-python3 script/run_wsclean_imaging.py input.ms image_prefix
+# DP3 operations write parset files directly to data directory
+# No /config mount needed - runs from /data working directory
 ```
 
 ## Visualization Tools
@@ -68,3 +67,4 @@ python3 script/plot_fits_with_sources.py image.fits sources.txt
 # Plot calibration solutions
 python3 script/plot_solutions.py solution.h5
 ```
+
