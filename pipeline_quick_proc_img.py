@@ -136,9 +136,9 @@ steps = [gaincal]
 msout = .
 gaincal.solint = 0
 gaincal.caltype = {cal_type}
-gaincal.uvlambdamin = 10
+gaincal.uvlambdamin = 20
 gaincal.maxiter = 500
-gaincal.tolerance = 3e-5
+gaincal.tolerance = 1e-5
 gaincal.usemodelcolumn = true
 gaincal.modelcolumn = MODEL_DATA
 gaincal.parmdb = {solution_fname}
@@ -168,7 +168,6 @@ def reset_solution_outliers(h5fname, N_sigma=3, reset=True):
     start_time = time.time()
     with h5py.File(h5fname, 'r') as f:
         amp_val = f["sol000"]["amplitude000"]["val"][:]
-        phase_val = f["sol000"]["phase000"]["val"][:]
         weight_val = f["sol000"]["amplitude000"]["weight"][:]
         
     for i in range(amp_val.shape[0]): # time
@@ -180,16 +179,13 @@ def reset_solution_outliers(h5fname, N_sigma=3, reset=True):
                 )[0]
                 if reset:
                     amp_val[i,j,outliers,k] = np.nan
-                    phase_val[i,j,outliers,k] = np.nan
                     weight_val[i,j,outliers,k] = 0
                 else:
                     amp_val[i,j,outliers,k] = 1
-                    phase_val[i,j,outliers,k] = 0
                     weight_val[i,j,outliers,k] = 0
 
     with h5py.File(h5fname ,'a') as f:
         f["sol000"]["amplitude000"]["val"][:] = amp_val
-        f["sol000"]["phase000"]["val"][:] = phase_val
         f["sol000"]["amplitude000"]["weight"][:] = weight_val
 
     elapsed = time.time() - start_time
@@ -350,12 +346,19 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     run_dp3_flag_avg(raw_ms, flagged_avg_ms)#, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_opt_GH1.lua")
     
     # selfcal:
-    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=800, mgain=0.9,horizon_mask=5,
+    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=600, mgain=0.9,horizon_mask=5,
         save_source_list=False, auto_mask=False, auto_threshold=False)
     run_gaincal(flagged_avg_ms, solution_fname=solution_file.name, cal_type="diagonalphase")
     run_applycal_dp3(flagged_avg_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["phase"])
 
     # selfcal2:
+    #run_wsclean_imaging(caltmp_ms, f"{output_prefix}_selfcal2_image", niter=800, mgain=0.9,horizon_mask=5,
+    #    save_source_list=False, auto_mask=False, auto_threshold=False)
+    #run_gaincal(caltmp_ms, solution_fname=solution_file.name, cal_type="diagonalamplitude")
+    #reset_solution_outliers( str(solution_file), N_sigma=3)
+    #run_applycal_dp3(caltmp_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["amplitude"])
+
+    # selfcal3:
     #run_wsclean_imaging(caltmp_ms, f"{output_prefix}_image", niter=800, mgain=0.9,horizon_mask=5,
     #    save_source_list=False, auto_mask=False, auto_threshold=False)
     #run_gaincal(caltmp_ms, solution_fname=solution_file.name, cal_type="diagonal")
@@ -371,13 +374,12 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     sun_ra, sun_dec = get_Sun_RA_DEC(time_mjd)
     mask_far_Sun_sources( data_dir / f"{output_prefix}_image_source-sources.txt" , 
         data_dir / f"{output_prefix}_image_source_masked-sources.txt", 
-        sun_ra, sun_dec, distance_deg=8.0)
+        sun_ra, sun_dec, distance_deg=6.0)
 
     # Step 8: DP3 subtract sources
     subtracted_ms = data_dir / f"{output_prefix}_image_source_masked_subtracted.ms"
     print(f"Subtracting sources from {final_ms} to {subtracted_ms}", str(data_dir / f"{output_prefix}_image_source_masked-sources.txt"))
-    run_dp3_subtract(final_ms, subtracted_ms, 
-         str(data_dir / f"{output_prefix}_image_source_masked-sources.txt"))
+    run_dp3_subtract(final_ms, subtracted_ms, str(data_dir / f"{output_prefix}_image_source_masked-sources.txt"))
 
     # step 9: phaseshift to sun
     shifted_ms = data_dir / f"{output_prefix}_image_source_sun_shifted.ms"
@@ -386,7 +388,7 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
 
     # final image
     run_wsclean_imaging(shifted_ms, f"{output_prefix}_image_source_sun_shifted", auto_pix_fov=False, 
-        niter=2000, mgain=0.8, size=512, scale='1.5arcmin', save_source_list=False, weight='briggs -0.5')
+        niter=3000, mgain=0.8, size=512, scale='1.5arcmin', save_source_list=False, weight='briggs -0.5')
     total_elapsed = time.time() - pipeline_start
     
     print("="*60)
