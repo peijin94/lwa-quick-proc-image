@@ -3,9 +3,7 @@
 Minimal pipeline script for LWA data processing
 Complete workflow: raw MS -> CASA applycal -> DP3 flag/avg -> wsclean -> gaincal -> applycal
 """
-import subprocess
-import sys
-import os
+import subprocess, sys, os
 import time
 from pathlib import Path
 import shutil
@@ -13,39 +11,26 @@ import wsclean_imaging
 from source_list import get_time_mjd, get_Sun_RA_DEC, mask_far_Sun_sources
 
 PIPELINE_SCRIPT_DIR = Path(__file__).parent
+EXECUTABLE_DIR = Path(__file__).parent / "exe"
 DEBUG = True
 
 def base_DP3_cmd(common_parent):
     return ["podman", "run", "--rm",
         "-v", f"{common_parent}:/data",
-        "-w", "/data", "astronrd/linc:latest"]
+        "-w", "/data", "astronrd/linc:5.0rc1"]
 
 def run_casa_applycal(input_ms, gaintable):
     """Apply CASA bandpass calibration"""
     print(f"Step : CASA applycal - {input_ms}")
     start_time = time.time()
-    
-    casa_script = f"""
-import casatools, casatasks
-from ovrolwasolar import flagging
-flagging.flag_bad_ants('{input_ms}')
-casatasks.applycal( vis='{input_ms}',gaintable='{gaintable}', applymode='calflag' )
-"""
-    # Write and run CASA script
-    script_file = Path("casa_applycal.py")
-    with open(script_file, 'w') as f:
-        f.write(casa_script)
-    
     try:
-        subprocess.run(["python3", str(script_file)], check=True)
+        subprocess.run(["python3", str(EXECUTABLE_DIR / "flagant_applybp.py"), str(input_ms), str(gaintable)], check=True)
         elapsed = time.time() - start_time
         print(f"✓ CASA applycal completed ({elapsed:.1f}s)")
     except subprocess.CalledProcessError as e:
         elapsed = time.time() - start_time
         print(f"✗ CASA applycal failed after {elapsed:.1f}s: {e}")
         sys.exit(1)
-    finally:
-        script_file.unlink(missing_ok=True)
 
 def run_dp3_flag_avg(input_ms, output_ms, strategy_file=None):
     """DP3 flagging and frequency averaging"""
@@ -60,7 +45,7 @@ def run_dp3_flag_avg(input_ms, output_ms, strategy_file=None):
     
     if strategy_file is not None:
         strategy_file = Path(strategy_file)
-        shutil.copy(strategy_file, common_parent / strategy_file.name)
+        shutil.copy(strategy_file, common_parent / strategy_file.name) # copy to common parent, no mounting needed
         strategy_file = common_parent / strategy_file.name
         strategy_file_path_str = f"/data/{strategy_file.relative_to(common_parent)}" # inside the data dir
     else:
@@ -69,32 +54,26 @@ def run_dp3_flag_avg(input_ms, output_ms, strategy_file=None):
     print(f"Strategy file: {strategy_file_path_str}")
 
     # Create DP3 parset in data directory
-    parset_content = f"""msin = {input_path.relative_to(common_parent)}
-msout = {output_path.relative_to(common_parent)}
+    parset_content = f"""msin={input_path.relative_to(common_parent)} 
+msout={output_path.relative_to(common_parent)}
 msin.datacolumn=CORRECTED_DATA
-steps = [flag, avg]
-flag.type = aoflagger
-flag.strategy = {strategy_file_path_str}
-flag.keepstatistics = false
-avg.type = averager
-avg.freqstep = 4
+steps=[flag,avg]
+flag.type=aoflagger
+flag.strategy={strategy_file_path_str}
+avg.type=averager
+avg.freqstep=4
 """
-    
-    parset_file = common_parent / "dp3_flag_avg.parset"
-    with open(parset_file, 'w') as f:
-        f.write(parset_content)
-    
-    cmd = base_DP3_cmd(common_parent) + ["DP3", f"/data/{parset_file.name}"]
+#flag.keepstatistics=false
+
+    cmd = base_DP3_cmd(common_parent) + ["DP3", *parset_content.split("\n")]
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         elapsed = time.time() - start_time
         print(f"✓ DP3 flag/avg completed ({elapsed:.1f}s): {output_ms}")
     except subprocess.CalledProcessError as e:
         elapsed = time.time() - start_time
-        print(f"✗ DP3 flag/avg failed after {elapsed:.1f}s: {e}")
+        print(f"✗ DP3 flag/avg failed after {elapsed:.1f}s: {e.stdout}")
         sys.exit(1)
-    finally:
-        parset_file.unlink(missing_ok=True)
 
 def run_wsclean_imaging(input_ms, output_prefix="image", auto_pix_fov=True, **kwargs):
     """WSClean imaging"""
@@ -131,24 +110,20 @@ def run_gaincal(input_ms, solution_fname="solution.h5", cal_type="diagonalphase"
     input_dir = input_path.parent
 #msout = /data/{input_path.name}_cal.ms
     
-    parset_content = f"""msin = {input_path.name}
-steps = [gaincal]
-msout = .
-gaincal.solint = 0
-gaincal.caltype = {cal_type}
-gaincal.uvlambdamin = 20
-gaincal.maxiter = 500
-gaincal.tolerance = 1e-5
-gaincal.usemodelcolumn = true
-gaincal.modelcolumn = MODEL_DATA
-gaincal.parmdb = {solution_fname}
+    parset_content = f"""msin={input_path.name}
+steps=[gaincal]
+msout=.
+gaincal.solint=0
+gaincal.caltype={cal_type}
+gaincal.uvlambdamin=10
+gaincal.maxiter=500
+gaincal.tolerance=1e-5
+gaincal.usemodelcolumn=true
+gaincal.modelcolumn=MODEL_DATA
+gaincal.parmdb={solution_fname}
 """
     
-    parset_file = input_dir / "gaincal.parset"
-    with open(parset_file, 'w') as f:
-        f.write(parset_content)
-    
-    cmd = base_DP3_cmd(input_dir) + ["DP3", f"/data/{parset_file.name}"]
+    cmd = base_DP3_cmd(input_dir) + ["DP3", *parset_content.split("\n")]
     
     try:
         res = subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -158,9 +133,7 @@ gaincal.parmdb = {solution_fname}
         elapsed = time.time() - start_time
         print(f"✗ DP3 gaincal failed after {elapsed:.1f}s: {e}")
         sys.exit(1)
-    finally:
-        parset_file.unlink(missing_ok=True)
-
+    
 import h5py
 import numpy as np
 
@@ -205,20 +178,17 @@ def run_applycal_dp3(input_ms,  output_ms, solution_fname="solution.h5", cal_ent
         input_path.parent, output_path.parent
     ]))
     
-    parset_content = f"""msin = {input_path.relative_to(common_parent)}
-msout = {output_path.relative_to(common_parent)}
-steps = [applycal]
-applycal.parmdb = {solution_fname}
-applycal.steps = [ {', '.join(cal_entry_lst)} ] \n
+    parset_content = f"""msin={input_path.relative_to(common_parent)}
+msout={output_path.relative_to(common_parent)}
+steps=[applycal]
+applycal.parmdb={solution_fname}
+applycal.steps=[{','.join(cal_entry_lst)}] \n
 """
     for cal_entry in cal_entry_lst:
         parset_content += f"applycal.{cal_entry}.correction={cal_entry}000 \n"
  
-    parset_file = common_parent / "applycal.parset"
-    with open(parset_file, 'w') as f:
-        f.write(parset_content)
-    
-    cmd = base_DP3_cmd(common_parent) + ["DP3", f"/data/{parset_file.name}"]
+
+    cmd = base_DP3_cmd(common_parent) + ["DP3", *parset_content.split("\n")]
     try:
         subprocess.run(cmd, check=True)
         elapsed = time.time() - start_time
@@ -227,8 +197,7 @@ applycal.steps = [ {', '.join(cal_entry_lst)} ] \n
         elapsed = time.time() - start_time
         print(f"✗ DP3 applycal failed after {elapsed:.1f}s: {e}")
         sys.exit(1)
-    finally:
-        parset_file.unlink(missing_ok=True)
+    
 
 
 def run_dp3_subtract(input_ms, output_ms, source_list):
@@ -245,19 +214,16 @@ def run_dp3_subtract(input_ms, output_ms, source_list):
         input_path.parent, output_path.parent, source_path.parent
     ]))
     
-    parset_content = f"""msin = {input_path.relative_to(common_parent)}
-msout = {output_path.relative_to(common_parent)}
-steps = [predict]
-predict.type = predict
-predict.sourcedb = {source_path.relative_to(common_parent)}
-predict.operation = subtract
+    parset_content = f"""msin={input_path.relative_to(common_parent)}
+msout={output_path.relative_to(common_parent)}
+steps=[predict]
+predict.type=predict
+predict.sourcedb={source_path.relative_to(common_parent)}
+predict.operation=subtract
 """
+        
+    cmd = base_DP3_cmd(common_parent) + ["DP3", *parset_content.split("\n")]
     
-    parset_file = common_parent / "subtract.parset"
-    with open(parset_file, 'w') as f:
-        f.write(parset_content)
-    
-    cmd = base_DP3_cmd(common_parent) + ["DP3", f"/data/{parset_file.name}"]
     try:
         subprocess.run(cmd, check=True)
         elapsed = time.time() - start_time
@@ -265,11 +231,8 @@ predict.operation = subtract
     except subprocess.CalledProcessError as e:
         elapsed = time.time() - start_time
         print(f"✗ DP3 subtract failed after {elapsed:.1f}s: {e}")
-        print(f"STDOUT: {e.stdout}")
-        print(f"STDERR: {e.stderr}")
         sys.exit(1)
-    finally:
-        parset_file.unlink(missing_ok=True)
+    
 
 def phaseshift_to_sun(ms_file, output_ms):
     """Phase shift MS to Sun's coordinates using DP3 PhaseShift step."""
@@ -277,6 +240,7 @@ def phaseshift_to_sun(ms_file, output_ms):
     output_path = Path(output_ms)
     if not ms_path.exists():
         raise FileNotFoundError(f"MS file not found: {ms_path}")
+    start_time = time.time()
 
     # Get Sun position
     time_mjd = get_time_mjd(str(ms_path))
@@ -287,34 +251,32 @@ def phaseshift_to_sun(ms_file, output_ms):
     output_abs = output_path.resolve()
     
     # Create parset content
-    parset_content = f"""msin = {ms_abs.relative_to(ms_abs.parent)}
-msout = {output_abs.relative_to(ms_abs.parent)}
-steps = [phaseshift]
-phaseshift.type = phaseshift
-phaseshift.phasecenter = [{sun_ra}deg, {sun_dec}deg]
+    parset_content = f"""msin={ms_abs.relative_to(ms_abs.parent)}
+msout={output_abs.relative_to(ms_abs.parent)}
+steps=[phaseshift]
+phaseshift.type=phaseshift
+phaseshift.phasecenter=[{sun_ra}deg, {sun_dec}deg]
 """
     
-    parset_file = ms_abs.parent / "phaseshift_to_sun.parset"
-    with open(parset_file, 'w') as f:
-        f.write(parset_content)
+    cmd = base_DP3_cmd(ms_abs.parent) + ["DP3", *parset_content.split("\n")]
     
     try:
         # Run DP3 in container
-        cmd = base_DP3_cmd(ms_abs.parent) + ["DP3", f"/data/{parset_file.name}"]
+        cmd = base_DP3_cmd(ms_abs.parent) + ["DP3", *parset_content.split("\n")]
         # wait until finish
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        
+        elapsed = time.time() - start_time
         if result.returncode != 0:
             print("DP3 failed!")
-            print("STDOUT:", result.stdout)
-            print("STDERR:", result.stderr)
-            raise RuntimeError(f"DP3 failed with exit code {result.returncode}")
+            raise RuntimeError(f"DP3 failed with exit {result}")
         
-        print("DP3 phase shift completed successfully!")
+        print(f"✓ DP3 phase shift completed ({elapsed:.1f}s): {ms_abs}")
         return str(ms_abs)
-        
-    finally:
-        parset_file.unlink(missing_ok=True)
+
+    except subprocess.CalledProcessError as e:
+        print(f"✗ DP3 phase shift failed after {elapsed:.1f}s: {e.stdout}")
+        sys.exit(1)
+    
 
 
 
@@ -343,8 +305,12 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     run_casa_applycal(raw_ms, gaintable)
     
     # Step 2: DP3 flagging and averaging
-    run_dp3_flag_avg(raw_ms, flagged_avg_ms)#, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_opt_GH1.lua")
+    run_dp3_flag_avg(raw_ms, flagged_avg_ms, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_sun_PZ.lua")
     
+    # make a copy of the flagged_avg_ms folder
+    flagged_avg_ms_copy = data_dir / f"{raw_path.stem}_flagged_avg_copy.ms"
+    shutil.copytree(flagged_avg_ms, flagged_avg_ms_copy)
+
     # selfcal:
     run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=600, mgain=0.9,horizon_mask=5,
         save_source_list=False, auto_mask=False, auto_threshold=False)
@@ -357,14 +323,6 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     #run_gaincal(caltmp_ms, solution_fname=solution_file.name, cal_type="diagonalamplitude")
     #reset_solution_outliers( str(solution_file), N_sigma=3)
     #run_applycal_dp3(caltmp_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["amplitude"])
-
-    # selfcal3:
-    #run_wsclean_imaging(caltmp_ms, f"{output_prefix}_image", niter=800, mgain=0.9,horizon_mask=5,
-    #    save_source_list=False, auto_mask=False, auto_threshold=False)
-    #run_gaincal(caltmp_ms, solution_fname=solution_file.name, cal_type="diagonal")
-    #reset_solution_outliers( str(solution_file), N_sigma=3)
-    #run_applycal_dp3(caltmp_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["amplitude", "phase"])
-
 
     # Step 6: wsclean for source subtraction
     run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=1500, mgain=0.9,horizon_mask=0.1 )#, multiscale=True)
