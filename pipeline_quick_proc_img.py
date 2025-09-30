@@ -15,6 +15,7 @@ EXECUTABLE_DIR = Path(__file__).parent / "exe"
 DEBUG = True
 
 def base_DP3_cmd(common_parent):
+    #"--root", "/fast/peijinz/containers/storage", if the runtime location is changed
     return ["podman", "run", "--rm",
         "-v", f"{common_parent}:/data",
         "-w", "/data", "astronrd/linc:5.0rc1"]
@@ -115,7 +116,7 @@ steps=[gaincal]
 msout=.
 gaincal.solint=0
 gaincal.caltype={cal_type}
-gaincal.uvlambdamin=10
+gaincal.uvlambdamin=30
 gaincal.maxiter=500
 gaincal.tolerance=1e-5
 gaincal.usemodelcolumn=true
