@@ -20,12 +20,12 @@ def base_DP3_cmd(common_parent):
         "-v", f"{common_parent}:/data",
         "-w", "/data", "astronrd/linc:5.0rc1"]
 
-def run_casa_applycal(input_ms, gaintable):
+def run_casa_applycal(input_ms, gaintable, bp_applied_ms):
     """Apply CASA bandpass calibration"""
     print(f"Step : CASA applycal - {input_ms}")
     start_time = time.time()
     try:
-        subprocess.run(["python3", str(EXECUTABLE_DIR / "flagant_applybp.py"), str(input_ms), str(gaintable)], check=True)
+        subprocess.run(["python3", str(EXECUTABLE_DIR / "flagant_applybp.py"), str(input_ms), str(gaintable), str(bp_applied_ms)], check=True)
         elapsed = time.time() - start_time
         print(f"✓ CASA applycal completed ({elapsed:.1f}s)")
     except subprocess.CalledProcessError as e:
@@ -196,7 +196,7 @@ applycal.steps=[{','.join(cal_entry_lst)}] \n
         print(f"✓ DP3 applycal completed ({elapsed:.1f}s): {output_ms}")
     except subprocess.CalledProcessError as e:
         elapsed = time.time() - start_time
-        print(f"✗ DP3 applycal failed after {elapsed:.1f}s: {e}")
+        print(f"✗ DP3 applycal failed after {elapsed:.1f}s: {e.stdout} {e.stderr}")
         sys.exit(1)
     
 
@@ -290,9 +290,12 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     
     # Define intermediate file paths
     flagged_avg_ms = data_dir / f"{raw_path.stem}_flagged_avg.ms"
+    bp_applied_ms = data_dir / f"{raw_path.stem}_bp_applied.ms"
     caltmp_ms = data_dir / f"{raw_path.stem}_caltmp.ms"
     solution_file = data_dir / "solution.h5"
     final_ms = data_dir / f"{raw_path.stem}_{output_prefix}_final.ms"
+    flagged_avg_ms_copy_uvh5 = data_dir / f"{raw_path.stem}_flagged_avg_copy_preprocessed.uvh5"
+    flagged_avg_ms_copy_uvh5_ms = data_dir / f"{raw_path.stem}_flagged_avg_copy_preprocessed_uvh5_ms.ms"
     
     print("="*60)
     print("LWA Quick Processing Pipeline")
@@ -303,20 +306,28 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     print("="*60)
 
     # Step 1: casatools applycal
-    run_casa_applycal(raw_ms, gaintable)
+    run_casa_applycal(raw_ms, gaintable, bp_applied_ms)
     
     # Step 2: DP3 flagging and averaging
-    run_dp3_flag_avg(raw_ms, flagged_avg_ms, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_sun_PZ.lua")
+    run_dp3_flag_avg(bp_applied_ms, flagged_avg_ms, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_sun_PZ.lua")
     
     # make a copy of the flagged_avg_ms folder
     flagged_avg_ms_copy = data_dir / f"{raw_path.stem}_flagged_avg_copy.ms"
     shutil.copytree(flagged_avg_ms, flagged_avg_ms_copy)
 
+    from ms_preproc_uvh5 import ms_to_uvh5
+    from uvh5_to_ms import uvh5_to_ms
+    
+    # casa preprocess the flagged_avg_ms_copy
+    ms_to_uvh5(str(flagged_avg_ms_copy), str(flagged_avg_ms_copy_uvh5))
+    uvh5_to_ms(str(flagged_avg_ms_copy_uvh5), str(flagged_avg_ms_copy_uvh5_ms))
+
+    current_ms = flagged_avg_ms_copy_uvh5_ms
     # selfcal:
-    run_wsclean_imaging(flagged_avg_ms, f"{output_prefix}_image", niter=600, mgain=0.9,horizon_mask=5,
+    run_wsclean_imaging(current_ms, f"{output_prefix}_image", niter=600, mgain=0.9,horizon_mask=5,
         save_source_list=False, auto_mask=False, auto_threshold=False)
-    run_gaincal(flagged_avg_ms, solution_fname=solution_file.name, cal_type="diagonalphase")
-    run_applycal_dp3(flagged_avg_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["phase"])
+    run_gaincal(current_ms, solution_fname=solution_file.name, cal_type="diagonalphase")
+    run_applycal_dp3(current_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["phase"])
 
     # selfcal2:
     #run_wsclean_imaging(caltmp_ms, f"{output_prefix}_selfcal2_image", niter=800, mgain=0.9,horizon_mask=5,
@@ -356,8 +367,6 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     print(f"Images: {output_prefix}_image*.fits")
 
     if DEBUG:
-        #run_wsclean_imaging(final_ms, f"{output_prefix}_image_final", niter=20000, mgain=0.9,horizon_mask=0.1,
-        #    weight='briggs -0.5', auto_pix_fov=False, size=4096, scale='2arcmin', multiscale=True)
         run_wsclean_imaging(subtracted_ms, f"{output_prefix}_image_source_masked_subtracted", niter=5000, mgain=0.9,horizon_mask=0.1)
 
 
@@ -373,14 +382,6 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
 
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python3 pipeline_quick_proc_img.py <raw_ms> <gaintable> [output_prefix]")
-        print("Example:")
-        print("  python3 pipeline_quick_proc_img.py \\")
-        print("    /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz.ms \\")
-        print("    /fast/peijinz/agile_proc/testdata/caltables/20240517_100405_55MHz.bcal \\")
-        print("    lwa_proc")
-        sys.exit(1)
     
     raw_ms = sys.argv[1]
     gaintable = sys.argv[2]
@@ -393,8 +394,7 @@ def main():
     
     if not Path(gaintable).exists():
         print(f"Error: Gaintable not found: {gaintable}")
-        sys.exit(1)
-    
+        sys.exit(1)    
     run_pipeline(raw_ms, gaintable, output_prefix, plot_mid_steps=True)
 
 if __name__ == "__main__":
