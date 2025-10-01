@@ -12,11 +12,11 @@ from source_list import get_time_mjd, get_Sun_RA_DEC, mask_far_Sun_sources
 
 PIPELINE_SCRIPT_DIR = Path(__file__).parent
 EXECUTABLE_DIR = Path(__file__).parent / "exe"
-DEBUG = True
+
 
 def base_DP3_cmd(common_parent):
     #"--root", "/fast/peijinz/containers/storage", if the runtime location is changed
-    return ["podman", "run", "--rm",
+    return ["podman", "run", #"--rm", "--root", "/fast/peijinz/containers/storage",
         "-v", f"{common_parent}:/data",
         "-w", "/data", "astronrd/linc:5.0rc1"]
 
@@ -281,7 +281,7 @@ phaseshift.phasecenter=[{sun_ra}deg, {sun_dec}deg]
 
 
 
-def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
+def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False, rm_ms_tmp=False, DEBUG=False):
     """Run complete processing pipeline"""
     
     pipeline_start = time.time()
@@ -290,12 +290,8 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     
     # Define intermediate file paths
     flagged_avg_ms = data_dir / f"{raw_path.stem}_flagged_avg.ms"
-    bp_applied_ms = data_dir / f"{raw_path.stem}_bp_applied.ms"
-    caltmp_ms = data_dir / f"{raw_path.stem}_caltmp.ms"
     solution_file = data_dir / "solution.h5"
     final_ms = data_dir / f"{raw_path.stem}_{output_prefix}_final.ms"
-    flagged_avg_ms_copy_uvh5 = data_dir / f"{raw_path.stem}_flagged_avg_copy_preprocessed.uvh5"
-    flagged_avg_ms_copy_uvh5_ms = data_dir / f"{raw_path.stem}_flagged_avg_copy_preprocessed_uvh5_ms.ms"
     
     print("="*60)
     print("LWA Quick Processing Pipeline")
@@ -310,17 +306,9 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     
     # Step 2: DP3 flagging and averaging, assuming corrected data column exists
     run_dp3_flag_avg(raw_ms, flagged_avg_ms, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_sun_PZ.lua")
-    
-    # make a copy of the flagged_avg_ms folder
-    #flagged_avg_ms_copy = data_dir / f"{raw_path.stem}_flagged_avg_copy.ms"
-    #shutil.copytree(flagged_avg_ms, flagged_avg_ms_copy)
 
-    #from ms_preproc_uvh5 import ms_to_uvh5
-    #from uvh5_to_ms import uvh5_to_ms
-    
-    # casa preprocess the flagged_avg_ms_copy
-    #ms_to_uvh5(str(flagged_avg_ms_copy), str(flagged_avg_ms_copy_uvh5))
-    #uvh5_to_ms(str(flagged_avg_ms_copy_uvh5), str(flagged_avg_ms_copy_uvh5_ms))
+    if rm_ms_tmp:
+        shutil.rmtree(raw_ms)
 
     current_ms = flagged_avg_ms
     # selfcal:
@@ -328,6 +316,9 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
         save_source_list=False, auto_mask=False, auto_threshold=False)
     run_gaincal(current_ms, solution_fname=solution_file.name, cal_type="diagonalphase")
     run_applycal_dp3(current_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["phase"])
+
+    if rm_ms_tmp:
+        shutil.rmtree(current_ms)
 
     # selfcal2:
     #run_wsclean_imaging(caltmp_ms, f"{output_prefix}_selfcal2_image", niter=800, mgain=0.9,horizon_mask=5,
@@ -355,20 +346,36 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     shifted_ms = data_dir / f"{output_prefix}_image_source_sun_shifted.ms"
     print(f"Phaseshifting to sun from {subtracted_ms} to {shifted_ms}")
     phaseshift_to_sun(subtracted_ms, shifted_ms)
+    if rm_ms_tmp:
+        shutil.rmtree(final_ms)
+        shutil.rmtree(subtracted_ms)
 
     # final image
     run_wsclean_imaging(shifted_ms, f"{output_prefix}_image_source_sun_shifted", auto_pix_fov=False, 
         niter=3000, mgain=0.8, size=512, scale='1.5arcmin', save_source_list=False, weight='briggs -0.5')
     total_elapsed = time.time() - pipeline_start
-    
+
     print("="*60)
     print(f"Pipeline completed successfully! (Total time: {total_elapsed:.1f}s)")
     print("="*60)
-    print(f"Images: {output_prefix}_image*.fits")
+
+
+
+    time_start = time.time()
+    default_wscleancmd = "wsclean -j 2 -mem 4 -quiet -no-reorder -no-dirty -no-update-model-required \
+        -horizon-mask 5deg -size 512 512 -scale 1.5arcmin -weight briggs -0.5 -minuv-l 10 \
+        -auto-threshold 3 -name " + f"{output_prefix}_final_img" + " -niter 10000 \
+        -mgain 0.8 -beam-fitting-size 2 -pol I"
+
+    import shlex
+    wscleancmd = default_wscleancmd + " -join-channels -channels-out 12 " + str(shifted_ms)
+    subprocess.run(shlex.split(wscleancmd), check=True, capture_output=True, text=True)
+
+    total_elapsed = time.time() - time_start
+    print(f"✓ WSClean imaging completed ({total_elapsed:.1f}s): {output_prefix}_final_img*.fits")
 
     if DEBUG:
         run_wsclean_imaging(subtracted_ms, f"{output_prefix}_image_source_masked_subtracted", niter=5000, mgain=0.9,horizon_mask=0.1)
-
 
     if plot_mid_steps:
         from script.plot_fits import plot_fits
@@ -379,6 +386,7 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
             plot_fits(data_dir / f"{output_prefix}_image_source_masked_subtracted-image.fits")
         from plot_solar_image import plot_solar_image
         plot_solar_image(data_dir / f"{output_prefix}_image_source_sun_shifted-image.fits")
+
 
 
 def main():
@@ -395,7 +403,7 @@ def main():
     if not Path(gaintable).exists():
         print(f"Error: Gaintable not found: {gaintable}")
         sys.exit(1)    
-    run_pipeline(raw_ms, gaintable, output_prefix, plot_mid_steps=True)
+    run_calib_pipeline(raw_ms, gaintable, output_prefix, plot_mid_steps=True, rm_ms_tmp=True, DEBUG=False)
 
 if __name__ == "__main__":
     main()

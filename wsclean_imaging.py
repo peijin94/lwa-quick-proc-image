@@ -72,7 +72,7 @@ def make_wsclean_cmd(msfile, imagename, size:int =4096, scale='2arcmin', fast_vi
 
     
     default_kwargs={
-        'j':'32',                    # number of threads
+        'j':'16',                    # number of threads
         'mem':'10',                 # fraction of memory usage
         'weight':'uniform',         # weighting scheme
         'no_dirty':'',              # don't save dirty image
@@ -112,7 +112,6 @@ def make_wsclean_cmd(msfile, imagename, size:int =4096, scale='2arcmin', fast_vi
             default_kwargs[key] = ''
         else:
             default_kwargs[key] = str(value)
-
 
     if fast_vis==True:
         if field is None:
