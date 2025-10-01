@@ -20,12 +20,12 @@ def base_DP3_cmd(common_parent):
         "-v", f"{common_parent}:/data",
         "-w", "/data", "astronrd/linc:5.0rc1"]
 
-def run_casa_applycal(input_ms, gaintable, bp_applied_ms):
+def run_casa_applycal(input_ms, gaintable):
     """Apply CASA bandpass calibration"""
     print(f"Step : CASA applycal - {input_ms}")
     start_time = time.time()
     try:
-        subprocess.run(["python3", str(EXECUTABLE_DIR / "flagant_applybp.py"), str(input_ms), str(gaintable), str(bp_applied_ms)], check=True)
+        subprocess.run(["python3", str(EXECUTABLE_DIR / "flagant_applybp.py"), str(input_ms), str(gaintable)], check=True)
         elapsed = time.time() - start_time
         print(f"✓ CASA applycal completed ({elapsed:.1f}s)")
     except subprocess.CalledProcessError as e:
@@ -306,23 +306,23 @@ def run_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False):
     print("="*60)
 
     # Step 1: casatools applycal
-    run_casa_applycal(raw_ms, gaintable, bp_applied_ms)
+    run_casa_applycal(raw_ms, gaintable )
     
-    # Step 2: DP3 flagging and averaging
-    run_dp3_flag_avg(bp_applied_ms, flagged_avg_ms, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_sun_PZ.lua")
+    # Step 2: DP3 flagging and averaging, assuming corrected data column exists
+    run_dp3_flag_avg(raw_ms, flagged_avg_ms, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_sun_PZ.lua")
     
     # make a copy of the flagged_avg_ms folder
-    flagged_avg_ms_copy = data_dir / f"{raw_path.stem}_flagged_avg_copy.ms"
-    shutil.copytree(flagged_avg_ms, flagged_avg_ms_copy)
+    #flagged_avg_ms_copy = data_dir / f"{raw_path.stem}_flagged_avg_copy.ms"
+    #shutil.copytree(flagged_avg_ms, flagged_avg_ms_copy)
 
-    from ms_preproc_uvh5 import ms_to_uvh5
-    from uvh5_to_ms import uvh5_to_ms
+    #from ms_preproc_uvh5 import ms_to_uvh5
+    #from uvh5_to_ms import uvh5_to_ms
     
     # casa preprocess the flagged_avg_ms_copy
-    ms_to_uvh5(str(flagged_avg_ms_copy), str(flagged_avg_ms_copy_uvh5))
-    uvh5_to_ms(str(flagged_avg_ms_copy_uvh5), str(flagged_avg_ms_copy_uvh5_ms))
+    #ms_to_uvh5(str(flagged_avg_ms_copy), str(flagged_avg_ms_copy_uvh5))
+    #uvh5_to_ms(str(flagged_avg_ms_copy_uvh5), str(flagged_avg_ms_copy_uvh5_ms))
 
-    current_ms = flagged_avg_ms_copy_uvh5_ms
+    current_ms = flagged_avg_ms
     # selfcal:
     run_wsclean_imaging(current_ms, f"{output_prefix}_image", niter=600, mgain=0.9,horizon_mask=5,
         save_source_list=False, auto_mask=False, auto_threshold=False)
