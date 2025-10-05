@@ -46,17 +46,17 @@ def run_dp3_flag_avg(input_ms, output_ms, strategy_file=None):
 
     # Create DP3 parset - use simple filenames since we're in /data
     parset_content = f"""msin={str(input_path)} 
-msout={str(output_path)}
-msin.datacolumn=CORRECTED_DATA
-steps=[flag,avg]
-flag.type=aoflagger
-flag.strategy={strategy_file_path_str}
-avg.type=averager
-avg.freqstep=4
-"""
+        msout={str(output_path)}
+        msin.datacolumn=CORRECTED_DATA
+        steps=[flag,avg]
+        flag.type=aoflagger
+        flag.strategy={strategy_file_path_str}
+        avg.type=averager
+        avg.freqstep=4
+        """
 #flag.keepstatistics=false
 
-    cmd = ["DP3", *parset_content.split("\n")]
+    cmd = ["DP3", *parset_content.split()]
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         elapsed = time.time() - start_time
@@ -100,19 +100,19 @@ def run_gaincal(input_ms, solution_fname="solution.h5", cal_type="diagonalphase"
 #msout = /data/{input_path.name}_cal.ms
     
     parset_content = f"""msin={str(input_path)}
-steps=[gaincal]
-msout=.
-gaincal.solint=0
-gaincal.caltype={cal_type}
-gaincal.uvlambdamin=30
-gaincal.maxiter=500
-gaincal.tolerance=1e-5
-gaincal.usemodelcolumn=true
-gaincal.modelcolumn=MODEL_DATA
-gaincal.parmdb={solution_fname}
-"""
+        steps=[gaincal]
+        msout=.
+        gaincal.solint=0
+        gaincal.caltype={cal_type}
+        gaincal.uvlambdamin=30
+        gaincal.maxiter=500
+        gaincal.tolerance=1e-5
+        gaincal.usemodelcolumn=true
+        gaincal.modelcolumn=MODEL_DATA
+        gaincal.parmdb={solution_fname}
+        """
     
-    cmd = ["DP3", *parset_content.split("\n")]
+    cmd = ["DP3", *parset_content.split()]
     
     try:
         res = subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -163,16 +163,16 @@ def run_applycal_dp3(input_ms,  output_ms, solution_fname="solution.h5", cal_ent
     output_path = Path(output_ms)
     
     parset_content = f"""msin={str(input_path)}
-msout={str(output_path)}
-steps=[applycal]
-applycal.parmdb={str(solution_fname)}
-applycal.steps=[{','.join(cal_entry_lst)}] \n
-"""
+        msout={str(output_path)}
+        steps=[applycal]
+        applycal.parmdb={str(solution_fname)}
+        applycal.steps=[{','.join(cal_entry_lst)}] \n
+        """
     for cal_entry in cal_entry_lst:
         parset_content += f"applycal.{cal_entry}.correction={cal_entry}000 \n"
  
 
-    cmd = ["DP3", *parset_content.split("\n")]
+    cmd = ["DP3", *parset_content.split()]
     try:
         subprocess.run(cmd, check=True)
         elapsed = time.time() - start_time
@@ -194,14 +194,14 @@ def run_dp3_subtract(input_ms, output_ms, source_list):
     source_path = Path(source_list)
     
     parset_content = f"""msin={str(input_path)}
-msout={str(output_path)}
-steps=[predict]
-predict.type=predict
-predict.sourcedb={str(source_path)}
-predict.operation=subtract
-"""
+        msout={str(output_path)}
+        steps=[predict]
+        predict.type=predict
+        predict.sourcedb={str(source_path)}
+        predict.operation=subtract
+        """
         
-    cmd = ["DP3", *parset_content.split("\n")]
+    cmd = ["DP3", *parset_content.split()]
     
     try:
         subprocess.run(cmd, check=True)
@@ -227,24 +227,17 @@ def phaseshift_to_sun(ms_file, output_ms):
     
     # Create parset content - use simple filenames
     parset_content = f"""msin={str(ms_path)}
-msout={str(output_path)}
-steps=[phaseshift]
-phaseshift.type=phaseshift
-phaseshift.phasecenter=[{sun_ra}deg, {sun_dec}deg]
-"""
+        msout={str(output_path)}
+        steps=[phaseshift]
+        phaseshift.type=phaseshift
+        phaseshift.phasecenter=[{sun_ra}deg,{sun_dec}deg]
+        """
     
-    cmd = ["DP3", *parset_content.split("\n")]
+    cmd = ["DP3", *parset_content.split()]
     
     try:
-        # Run DP3 in container
-        cmd = ["DP3", *parset_content.split("\n")]
-        # wait until finish
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        elapsed = time.time() - start_time
-        if result.returncode != 0:
-            print("DP3 failed!")
-            raise RuntimeError(f"DP3 failed with exit {result}")
-        
+        subprocess.run(cmd, check=True)
+        elapsed = time.time() - start_time  
         print(f"✓ DP3 phase shift completed ({elapsed:.1f}s): {output_path}")
         return str(output_path)
 
@@ -252,6 +245,32 @@ phaseshift.phasecenter=[{sun_ra}deg, {sun_dec}deg]
         print(f"✗ DP3 phase shift failed after {elapsed:.1f}s: {e.stdout}")
         sys.exit(1)
     
+
+def run_dp3_avg(input_ms, output_ms, freq_step=4):
+    """DP3 frequency averaging"""
+    print(f"Step : DP3 frequency averaging - {input_ms} -> {output_ms}")
+    start_time = time.time()
+    
+    input_path = Path(input_ms)
+    output_path = Path(output_ms)
+    
+    parset_content = f"""msin={str(input_path)}
+        msout={str(output_path)}
+        steps=[avg]
+        avg.type=averager
+        avg.freqstep={freq_step}
+        """
+        
+    cmd = ["DP3", *parset_content.split()]
+    
+    try:
+        subprocess.run(cmd, check=True)
+        elapsed = time.time() - start_time
+        print(f"✓ DP3 frequency averaging completed ({elapsed:.1f}s): {output_ms}")
+    except subprocess.CalledProcessError as e:
+        elapsed = time.time() - start_time
+        print(f"✗ DP3 frequency averaging failed after {elapsed:.1f}s: {e}")
+        sys.exit(1)
 
 def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False, rm_ms_tmp=False, DEBUG=False):
     """Run complete processing pipeline"""
@@ -262,7 +281,7 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
     
     # Define intermediate file paths
     flagged_avg_ms = data_dir / f"{raw_path.stem}_flagged_avg.ms"
-    solution_file = data_dir / "solution.h5"
+    solution_file = data_dir / f"{output_prefix}_solution.h5"
     final_ms = data_dir / f"{raw_path.stem}_{output_prefix}_final.ms"
     
     print("="*60)
@@ -284,20 +303,13 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
 
     current_ms = flagged_avg_ms
     # selfcal:
-    run_wsclean_imaging(current_ms, str(data_dir / f"{output_prefix}_image"), niter=600, mgain=0.9,horizon_mask=5,
+    run_wsclean_imaging(current_ms, str(data_dir / f"{output_prefix}_image"), niter=800, mgain=0.9,horizon_mask=5,
         save_source_list=False, auto_mask=False, auto_threshold=False)
     run_gaincal(current_ms, solution_fname=str(solution_file), cal_type="diagonalphase")
     run_applycal_dp3(current_ms,final_ms, solution_fname=str(solution_file), cal_entry_lst=["phase"])
 
     if rm_ms_tmp:
         shutil.rmtree(current_ms)
-
-    # selfcal2:
-    #run_wsclean_imaging(caltmp_ms, f"{output_prefix}_selfcal2_image", niter=800, mgain=0.9,horizon_mask=5,
-    #    save_source_list=False, auto_mask=False, auto_threshold=False)
-    #run_gaincal(caltmp_ms, solution_fname=solution_file.name, cal_type="diagonalamplitude")
-    #reset_solution_outliers( str(solution_file), N_sigma=3)
-    #run_applycal_dp3(caltmp_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["amplitude"])
 
     # Step 6: wsclean for source subtraction
     run_wsclean_imaging(final_ms, str(data_dir / f"{output_prefix}_image_source"), niter=1500, mgain=0.9,horizon_mask=0.1 )#, multiscale=True)
@@ -325,6 +337,14 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
     # final image
     run_wsclean_imaging(shifted_ms, str(data_dir / f"{output_prefix}_image_source_sun_shifted"), auto_pix_fov=False, 
         niter=3000, mgain=0.8, size=512, scale='1.5arcmin', save_source_list=False, weight='briggs -0.5')
+    shifted_ms_avg = data_dir / f"{output_prefix}_image_source_sun_shifted_avg.ms"
+    run_dp3_avg(shifted_ms, shifted_ms_avg, freq_step=4)
+    
+    
+    # make a copy
+    shifted_ms_avg_copy = data_dir / f"{output_prefix}_image_source_sun_shifted_avg_copy.ms"
+    shutil.copytree(shifted_ms_avg, shifted_ms_avg_copy)
+
     total_elapsed = time.time() - pipeline_start
 
     print("="*60)
@@ -336,11 +356,11 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
     time_start = time.time()
     default_wscleancmd = "wsclean -j 8 -mem 10 -quiet -no-reorder -no-dirty -no-update-model-required \
         -horizon-mask 5deg -size 512 512 -scale 1.5arcmin -weight briggs -0.5 -minuv-l 10 \
-        -auto-threshold 3 -name " + f"{output_prefix}_final_img" + " -niter 6000 \
+        -auto-threshold 3 -name " + f"{output_prefix}_fch_avg" + " -niter 6000 \
         -mgain 0.85 -beam-fitting-size 2 -pol I"
 
     import shlex
-    wscleancmd = default_wscleancmd + " -join-channels -channels-out 12 " + str(shifted_ms)
+    wscleancmd = default_wscleancmd + " -join-channels -channels-out 12 " + str(shifted_ms_avg)
     subprocess.run(shlex.split(wscleancmd), check=True, capture_output=True, text=True)
 
     total_elapsed = time.time() - time_start
