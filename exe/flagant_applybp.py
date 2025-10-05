@@ -1,9 +1,6 @@
 import casatasks
 from ovrolwasolar import flagging
-import shutil
 import argparse
-
-from casatasks import flagdata, split
 
 parser = argparse.ArgumentParser()
 parser.add_argument("input_ms", type=str)
