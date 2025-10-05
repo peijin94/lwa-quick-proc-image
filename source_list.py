@@ -7,7 +7,7 @@ from pathlib import Path
 from astropy.coordinates import SkyCoord, EarthLocation, get_body
 from astropy.time import Time
 import astropy.units as u
-from casacore.tables import table
+from casatools import table
 
 def parse_wsclean_coordinates(ra_str, dec_str):
     """Parse WSClean coordinates to SkyCoord object."""
@@ -69,9 +69,10 @@ def distance_to_src_list(sourcelist_fname, ra_deg, dec_deg):
 
 def get_time_mjd(msname):
     """Get the time in Modified Julian Days from a MS file."""
-    obs = table(msname+'/OBSERVATION', readonly=True)
-    start_mjd = obs.getcol('TIME_RANGE')[0][0] / 86400.0  
-    obs.close()
+    tb = table()
+    tb.open(msname+'/OBSERVATION')
+    start_mjd = tb.getcol('TIME_RANGE')[0][0] / 86400.0  
+    tb.close()
     return start_mjd
 
 

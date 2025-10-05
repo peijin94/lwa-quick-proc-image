@@ -1,12 +1,13 @@
 import numpy as np
-from casacore.tables import table
+from casatools import table
 
 
 def get_freq_from_ms(msname):
-    spw = table(f"{msname}/SPECTRAL_WINDOW")
-    chan_freq = spw.getcol('CHAN_FREQ')  # shape: (nchan, nspw)
-    spw.close()
-    return np.median(chan_freq.ravel())
+    tb = table()
+    tb.open(f"{msname}/SPECTRAL_WINDOW")
+    chan_freqs = tb.getcol("CHAN_FREQ")             # per-channel frequencies
+    tb.close()
+    return np.median(chan_freqs.ravel())
 
 def find_smallest_fftw_sz_number(n):
     """
@@ -72,7 +73,7 @@ def make_wsclean_cmd(msfile, imagename, size:int =4096, scale='2arcmin', fast_vi
 
     
     default_kwargs={
-        'j':'16',                    # number of threads
+        'j':'8',                    # number of threads
         'mem':'10',                 # fraction of memory usage
         'weight':'uniform',         # weighting scheme
         'no_dirty':'',              # don't save dirty image

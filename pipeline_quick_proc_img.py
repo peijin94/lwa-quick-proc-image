@@ -13,13 +13,6 @@ from source_list import get_time_mjd, get_Sun_RA_DEC, mask_far_Sun_sources
 PIPELINE_SCRIPT_DIR = Path(__file__).parent
 EXECUTABLE_DIR = Path(__file__).parent / "exe"
 
-
-def base_DP3_cmd(common_parent):
-    #"--root", "/fast/peijinz/containers/storage", if the runtime location is changed
-    return ["podman", "run", #"--rm", "--root", "/fast/peijinz/containers/storage",
-        "-v", f"{common_parent}:/data",
-        "-w", "/data", "astronrd/linc:5.0rc1"]
-
 def run_casa_applycal(input_ms, gaintable):
     """Apply CASA bandpass calibration"""
     print(f"Step : CASA applycal - {input_ms}")
@@ -40,23 +33,20 @@ def run_dp3_flag_avg(input_ms, output_ms, strategy_file=None):
     
     input_path = Path(input_ms)
     output_path = Path(output_ms)
-
-    # Find common parent directory
-    common_parent = Path(os.path.commonpath([input_path.parent, output_path.parent]))
     
     if strategy_file is not None:
         strategy_file = Path(strategy_file)
-        shutil.copy(strategy_file, common_parent / strategy_file.name) # copy to common parent, no mounting needed
-        strategy_file = common_parent / strategy_file.name
-        strategy_file_path_str = f"/data/{strategy_file.relative_to(common_parent)}" # inside the data dir
+        strategy_dest = Path("/data") / strategy_file.name
+        shutil.copy(strategy_file, strategy_dest)
+        strategy_file_path_str = str(strategy_dest)
     else:
-        strategy_file_path_str = "/usr/local/share/linc/rfistrategies/lofar-default.lua" # inside the container
+        strategy_file_path_str = "/usr/local/share/linc/rfistrategies/lofar-default.lua"
 
     print(f"Strategy file: {strategy_file_path_str}")
 
-    # Create DP3 parset in data directory
-    parset_content = f"""msin={input_path.relative_to(common_parent)} 
-msout={output_path.relative_to(common_parent)}
+    # Create DP3 parset - use simple filenames since we're in /data
+    parset_content = f"""msin={str(input_path)} 
+msout={str(output_path)}
 msin.datacolumn=CORRECTED_DATA
 steps=[flag,avg]
 flag.type=aoflagger
@@ -66,7 +56,7 @@ avg.freqstep=4
 """
 #flag.keepstatistics=false
 
-    cmd = base_DP3_cmd(common_parent) + ["DP3", *parset_content.split("\n")]
+    cmd = ["DP3", *parset_content.split("\n")]
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         elapsed = time.time() - start_time
@@ -82,7 +72,6 @@ def run_wsclean_imaging(input_ms, output_prefix="image", auto_pix_fov=True, **kw
     start_time = time.time()
     
     input_path = Path(input_ms)
-    input_dir = input_path.parent
     
     # Generate WSClean command using utils
     wsclean_cmd_str = wsclean_imaging.make_wsclean_cmd(
@@ -92,7 +81,7 @@ def run_wsclean_imaging(input_ms, output_prefix="image", auto_pix_fov=True, **kw
     # Split the command string into a list for subprocess
     wsclean_args = wsclean_cmd_str.split()[1:]  # Remove 'wsclean' from the beginning
     
-    cmd = base_DP3_cmd(input_dir) + ["wsclean"] + wsclean_args + [f"/data/{input_path.name}"]
+    cmd = ["wsclean"] + wsclean_args + [str(input_path)]
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         elapsed = time.time() - start_time
@@ -108,10 +97,9 @@ def run_gaincal(input_ms, solution_fname="solution.h5", cal_type="diagonalphase"
     start_time = time.time()
     
     input_path = Path(input_ms)
-    input_dir = input_path.parent
 #msout = /data/{input_path.name}_cal.ms
     
-    parset_content = f"""msin={input_path.name}
+    parset_content = f"""msin={str(input_path)}
 steps=[gaincal]
 msout=.
 gaincal.solint=0
@@ -124,7 +112,7 @@ gaincal.modelcolumn=MODEL_DATA
 gaincal.parmdb={solution_fname}
 """
     
-    cmd = base_DP3_cmd(input_dir) + ["DP3", *parset_content.split("\n")]
+    cmd = ["DP3", *parset_content.split("\n")]
     
     try:
         res = subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -174,22 +162,17 @@ def run_applycal_dp3(input_ms,  output_ms, solution_fname="solution.h5", cal_ent
     input_path = Path(input_ms)
     output_path = Path(output_ms)
     
-    # Find common parent directory
-    common_parent = Path(os.path.commonpath([
-        input_path.parent, output_path.parent
-    ]))
-    
-    parset_content = f"""msin={input_path.relative_to(common_parent)}
-msout={output_path.relative_to(common_parent)}
+    parset_content = f"""msin={str(input_path)}
+msout={str(output_path)}
 steps=[applycal]
-applycal.parmdb={solution_fname}
+applycal.parmdb={str(solution_fname)}
 applycal.steps=[{','.join(cal_entry_lst)}] \n
 """
     for cal_entry in cal_entry_lst:
         parset_content += f"applycal.{cal_entry}.correction={cal_entry}000 \n"
  
 
-    cmd = base_DP3_cmd(common_parent) + ["DP3", *parset_content.split("\n")]
+    cmd = ["DP3", *parset_content.split("\n")]
     try:
         subprocess.run(cmd, check=True)
         elapsed = time.time() - start_time
@@ -206,24 +189,19 @@ def run_dp3_subtract(input_ms, output_ms, source_list):
     print(f"Step : DP3 subtract - {input_ms} -> {output_ms}")
     start_time = time.time()
     
-    input_path = Path(input_ms).resolve()
-    output_path = Path(output_ms).resolve()
-    source_path = Path(source_list).resolve()
+    input_path = Path(input_ms)
+    output_path = Path(output_ms)
+    source_path = Path(source_list)
     
-    # Find common parent directory
-    common_parent = Path(os.path.commonpath([
-        input_path.parent, output_path.parent, source_path.parent
-    ]))
-    
-    parset_content = f"""msin={input_path.relative_to(common_parent)}
-msout={output_path.relative_to(common_parent)}
+    parset_content = f"""msin={str(input_path)}
+msout={str(output_path)}
 steps=[predict]
 predict.type=predict
-predict.sourcedb={source_path.relative_to(common_parent)}
+predict.sourcedb={str(source_path)}
 predict.operation=subtract
 """
         
-    cmd = base_DP3_cmd(common_parent) + ["DP3", *parset_content.split("\n")]
+    cmd = ["DP3", *parset_content.split("\n")]
     
     try:
         subprocess.run(cmd, check=True)
@@ -247,23 +225,19 @@ def phaseshift_to_sun(ms_file, output_ms):
     time_mjd = get_time_mjd(str(ms_path))
     sun_ra, sun_dec = get_Sun_RA_DEC(time_mjd)
     
-    # Use absolute paths and find common parent
-    ms_abs = ms_path.resolve()
-    output_abs = output_path.resolve()
-    
-    # Create parset content
-    parset_content = f"""msin={ms_abs.relative_to(ms_abs.parent)}
-msout={output_abs.relative_to(ms_abs.parent)}
+    # Create parset content - use simple filenames
+    parset_content = f"""msin={str(ms_path)}
+msout={str(output_path)}
 steps=[phaseshift]
 phaseshift.type=phaseshift
 phaseshift.phasecenter=[{sun_ra}deg, {sun_dec}deg]
 """
     
-    cmd = base_DP3_cmd(ms_abs.parent) + ["DP3", *parset_content.split("\n")]
+    cmd = ["DP3", *parset_content.split("\n")]
     
     try:
         # Run DP3 in container
-        cmd = base_DP3_cmd(ms_abs.parent) + ["DP3", *parset_content.split("\n")]
+        cmd = ["DP3", *parset_content.split("\n")]
         # wait until finish
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         elapsed = time.time() - start_time
@@ -271,15 +245,13 @@ phaseshift.phasecenter=[{sun_ra}deg, {sun_dec}deg]
             print("DP3 failed!")
             raise RuntimeError(f"DP3 failed with exit {result}")
         
-        print(f"✓ DP3 phase shift completed ({elapsed:.1f}s): {ms_abs}")
-        return str(ms_abs)
+        print(f"✓ DP3 phase shift completed ({elapsed:.1f}s): {output_path}")
+        return str(output_path)
 
     except subprocess.CalledProcessError as e:
         print(f"✗ DP3 phase shift failed after {elapsed:.1f}s: {e.stdout}")
         sys.exit(1)
     
-
-
 
 def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False, rm_ms_tmp=False, DEBUG=False):
     """Run complete processing pipeline"""
@@ -312,10 +284,10 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
 
     current_ms = flagged_avg_ms
     # selfcal:
-    run_wsclean_imaging(current_ms, f"{output_prefix}_image", niter=600, mgain=0.9,horizon_mask=5,
+    run_wsclean_imaging(current_ms, str(data_dir / f"{output_prefix}_image"), niter=600, mgain=0.9,horizon_mask=5,
         save_source_list=False, auto_mask=False, auto_threshold=False)
-    run_gaincal(current_ms, solution_fname=solution_file.name, cal_type="diagonalphase")
-    run_applycal_dp3(current_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["phase"])
+    run_gaincal(current_ms, solution_fname=str(solution_file), cal_type="diagonalphase")
+    run_applycal_dp3(current_ms,final_ms, solution_fname=str(solution_file), cal_entry_lst=["phase"])
 
     if rm_ms_tmp:
         shutil.rmtree(current_ms)
@@ -328,7 +300,7 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
     #run_applycal_dp3(caltmp_ms,final_ms, solution_fname=solution_file.name, cal_entry_lst=["amplitude"])
 
     # Step 6: wsclean for source subtraction
-    run_wsclean_imaging(final_ms, f"{output_prefix}_image_source", niter=1500, mgain=0.9,horizon_mask=0.1 )#, multiscale=True)
+    run_wsclean_imaging(final_ms, str(data_dir / f"{output_prefix}_image_source"), niter=1500, mgain=0.9,horizon_mask=0.1 )#, multiscale=True)
     
     # Step 7: mask far Sun sources
     time_mjd = get_time_mjd(str(final_ms))
@@ -351,7 +323,7 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
         shutil.rmtree(subtracted_ms)
 
     # final image
-    run_wsclean_imaging(shifted_ms, f"{output_prefix}_image_source_sun_shifted", auto_pix_fov=False, 
+    run_wsclean_imaging(shifted_ms, str(data_dir / f"{output_prefix}_image_source_sun_shifted"), auto_pix_fov=False, 
         niter=3000, mgain=0.8, size=512, scale='1.5arcmin', save_source_list=False, weight='briggs -0.5')
     total_elapsed = time.time() - pipeline_start
 
@@ -362,10 +334,10 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
 
 
     time_start = time.time()
-    default_wscleancmd = "wsclean -j 2 -mem 4 -quiet -no-reorder -no-dirty -no-update-model-required \
+    default_wscleancmd = "wsclean -j 8 -mem 10 -quiet -no-reorder -no-dirty -no-update-model-required \
         -horizon-mask 5deg -size 512 512 -scale 1.5arcmin -weight briggs -0.5 -minuv-l 10 \
-        -auto-threshold 3 -name " + f"{output_prefix}_final_img" + " -niter 10000 \
-        -mgain 0.8 -beam-fitting-size 2 -pol I"
+        -auto-threshold 3 -name " + f"{output_prefix}_final_img" + " -niter 6000 \
+        -mgain 0.85 -beam-fitting-size 2 -pol I"
 
     import shlex
     wscleancmd = default_wscleancmd + " -join-channels -channels-out 12 " + str(shifted_ms)
@@ -375,7 +347,7 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
     print(f"✓ WSClean imaging completed ({total_elapsed:.1f}s): {output_prefix}_final_img*.fits")
 
     if DEBUG:
-        run_wsclean_imaging(subtracted_ms, f"{output_prefix}_image_source_masked_subtracted", niter=5000, mgain=0.9,horizon_mask=0.1)
+        run_wsclean_imaging(subtracted_ms, str(data_dir / f"{output_prefix}_image_source_masked_subtracted"), niter=5000, mgain=0.9,horizon_mask=0.1)
 
     if plot_mid_steps:
         from script.plot_fits import plot_fits
@@ -393,7 +365,6 @@ def main():
     
     raw_ms = sys.argv[1]
     gaintable = sys.argv[2]
-    output_prefix = sys.argv[3] if len(sys.argv) > 3 else "proc"
     
     # Validate inputs
     if not Path(raw_ms).exists():
@@ -403,6 +374,9 @@ def main():
     if not Path(gaintable).exists():
         print(f"Error: Gaintable not found: {gaintable}")
         sys.exit(1)    
+
+    output_prefix = sys.argv[3] if len(sys.argv) > 3 else (Path(raw_ms)).stem.split('.')[0]
+
     run_calib_pipeline(raw_ms, gaintable, output_prefix, plot_mid_steps=True, rm_ms_tmp=True, DEBUG=False)
 
 if __name__ == "__main__":
