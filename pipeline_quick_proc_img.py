@@ -100,6 +100,8 @@ def run_gaincal(input_ms, solution_fname="solution.h5", cal_type="diagonalphase"
 #msout = /data/{input_path.name}_cal.ms
     
     parset_content = f"""msin={str(input_path)}
+        showprogress=False
+        verbosity="quiet"
         steps=[gaincal]
         msout=.
         gaincal.solint=0
@@ -165,6 +167,8 @@ def run_applycal_dp3(input_ms,  output_ms, solution_fname="solution.h5", cal_ent
     parset_content = f"""msin={str(input_path)}
         msout={str(output_path)}
         steps=[applycal]
+        showprogress=False
+        verbosity="quiet"
         applycal.parmdb={str(solution_fname)}
         applycal.steps=[{','.join(cal_entry_lst)}] \n
         """
@@ -194,6 +198,8 @@ def run_dp3_subtract(input_ms, output_ms, source_list):
     source_path = Path(source_list)
     
     parset_content = f"""msin={str(input_path)}
+        showprogress=False
+        verbosity="quiet"
         msout={str(output_path)}
         steps=[predict]
         predict.type=predict
@@ -341,8 +347,8 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
     run_dp3_avg(shifted_ms, shifted_ms_avg, freq_step=4)
     
     # make a copy
-    shifted_ms_avg_copy = data_dir / f"{output_prefix}_image_source_sun_shifted_avg_copy.ms"
-    shutil.copytree(shifted_ms_avg, shifted_ms_avg_copy)
+    # shifted_ms_avg_copy = data_dir / f"{output_prefix}_image_source_sun_shifted_avg_copy.ms"
+    # shutil.copytree(shifted_ms_avg, shifted_ms_avg_copy)
 
     total_elapsed = time.time() - pipeline_start
 
@@ -353,10 +359,10 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
 
 
     time_start = time.time()
-    default_wscleancmd = "wsclean -j 12 -mem 6 -quiet -no-dirty -no-update-model-required \
+    default_wscleancmd = "wsclean -j 8 -mem 6 -quiet -no-dirty -no-update-model-required \
         -horizon-mask 5deg -size 512 512 -scale 1.5arcmin -weight briggs -0.5 -minuv-l 10 \
         -auto-threshold 3 -name " + f"{output_prefix}_fch_avg" + " -niter 6000 \
-        -mgain 0.85 -beam-fitting-size 2 -pol I"
+        -mgain 0.9 -beam-fitting-size 2 -pol I"
 
     import shlex
     wscleancmd = default_wscleancmd + " -join-channels -channels-out 12 " + str(shifted_ms_avg)
@@ -396,7 +402,7 @@ def main():
 
     output_prefix = sys.argv[3] if len(sys.argv) > 3 else (Path(raw_ms)).stem.split('.')[0]
 
-    run_calib_pipeline(raw_ms, gaintable, output_prefix, plot_mid_steps=True, rm_ms_tmp=True, DEBUG=False)
+    run_calib_pipeline(raw_ms, gaintable, output_prefix, plot_mid_steps=False, rm_ms_tmp=True, DEBUG=False)
 
 if __name__ == "__main__":
     main()

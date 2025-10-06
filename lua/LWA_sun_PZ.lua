@@ -29,7 +29,7 @@ function execute(input)
   -- If the following variable is true, the strategy will consider existing flags
   -- as bad data. It will exclude flagged data from detection, and make sure that any existing
   -- flags on input will be flagged on output. If set to false, existing flags are ignored.
-  local use_input_flags = false
+  local use_input_flags = true
   local frequency_resize_factor = 3.0 -- Amount of "extra" smoothing in frequency direction
   local transient_threshold_factor = 1.0 -- decreasing this value makes detection of transient RFI more aggressive
 
@@ -99,13 +99,13 @@ function execute(input)
         -- the following visualize function will add the current result
         -- to the list of displayable visualizations.
         -- If the script is not running inside rfigui, the call is ignored.
-        aoflagger.visualize(converted_data, "Fit #" .. i, i - 1)
+        -- aoflagger.visualize(converted_data, "Fit #" .. i, i - 1)
 
         local tmp = converted_copy - converted_data
         tmp:set_mask(converted_data)
         converted_data = tmp
 
-        aoflagger.visualize(converted_data, "Residual #" .. i, i + iteration_count * 2)
+        -- aoflagger.visualize(converted_data, "Residual #" .. i, i + iteration_count * 2)
         aoflagger.set_progress((ipol - 1) * iteration_count + i, #flag_polarizations * iteration_count)
 
         -- Calculate sqrt |x|^2, then smooth it to calculate the local (unnormalized) RMS
@@ -114,12 +114,12 @@ function execute(input)
         aoflagger.low_pass_filter(resized_data, 21, 31, 2.5, 5.0)
         aoflagger.upsample(resized_data, deviation, 2, 5)
         deviation = aoflagger.sqrt(deviation)
-        aoflagger.visualize(deviation, "Deviation #" .. i, i + iteration_count)
+        -- aoflagger.visualize(deviation, "Deviation #" .. i, i + iteration_count)
 
         -- Divide the data by the local deviation to make the thresholding be relative to the
         -- local deviation.
         converted_data = converted_data / deviation
-        aoflagger.visualize(converted_data, "Deviation normalized #" .. i, i + iteration_count * 3)
+        -- aoflagger.visualize(converted_data, "Deviation normalized #" .. i, i + iteration_count * 3)
         aoflagger.set_progress((ipol - 1) * iteration_count + i, #flag_polarizations * iteration_count)
       end -- end of iterations
 
@@ -160,7 +160,7 @@ function execute(input)
       input:join_mask(converted_data)
     end
 
-    aoflagger.visualize(converted_data, "Residual #" .. iteration_count, 4 * iteration_count)
+    -- aoflagger.visualize(converted_data, "Residual #" .. iteration_count, 4 * iteration_count)
     aoflagger.set_progress(ipol, #flag_polarizations)
   end -- end of polarization iterations
 

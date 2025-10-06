@@ -9,4 +9,4 @@ podman run --rm -it \
   python3 /lwasoft/pipeline_quick_proc_img.py \
     /data/slow/20250917_200002_73MHz.ms \
     /data/caltables/20250814_064505_73MHz.bcal \
-  > proc.log 2>&1
+  > proc.log
