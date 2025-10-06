@@ -73,8 +73,8 @@ def make_wsclean_cmd(msfile, imagename, size:int =4096, scale='2arcmin', fast_vi
 
     
     default_kwargs={
-        'j':'8',                    # number of threads
-        'mem':'10',                 # fraction of memory usage
+        'j':'16',                    # number of threads
+        'mem':'6',                 # fraction of memory usage
         'weight':'uniform',         # weighting scheme
         'no_dirty':'',              # don't save dirty image
         'no_update_model_required':'', # don't update model required

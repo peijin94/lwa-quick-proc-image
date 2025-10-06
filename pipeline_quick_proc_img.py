@@ -335,11 +335,10 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
         shutil.rmtree(subtracted_ms)
 
     # final image
-    run_wsclean_imaging(shifted_ms, str(data_dir / f"{output_prefix}_image_source_sun_shifted"), auto_pix_fov=False, 
-        niter=3000, mgain=0.8, size=512, scale='1.5arcmin', save_source_list=False, weight='briggs -0.5')
+#    run_wsclean_imaging(shifted_ms, str(data_dir / f"{output_prefix}_image_source_sun_shifted"), auto_pix_fov=False, 
+#        niter=3000, mgain=0.8, size=512, scale='1.5arcmin', save_source_list=False, weight='briggs -0.5')
     shifted_ms_avg = data_dir / f"{output_prefix}_image_source_sun_shifted_avg.ms"
     run_dp3_avg(shifted_ms, shifted_ms_avg, freq_step=4)
-    
     
     # make a copy
     shifted_ms_avg_copy = data_dir / f"{output_prefix}_image_source_sun_shifted_avg_copy.ms"
@@ -354,7 +353,7 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
 
 
     time_start = time.time()
-    default_wscleancmd = "wsclean -j 8 -mem 10 -quiet -no-reorder -no-dirty -no-update-model-required \
+    default_wscleancmd = "wsclean -j 12 -mem 6 -quiet -no-dirty -no-update-model-required \
         -horizon-mask 5deg -size 512 512 -scale 1.5arcmin -weight briggs -0.5 -minuv-l 10 \
         -auto-threshold 3 -name " + f"{output_prefix}_fch_avg" + " -niter 6000 \
         -mgain 0.85 -beam-fitting-size 2 -pol I"
