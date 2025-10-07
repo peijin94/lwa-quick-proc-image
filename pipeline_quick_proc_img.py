@@ -13,17 +13,17 @@ from source_list import get_time_mjd, get_Sun_RA_DEC, mask_far_Sun_sources
 PIPELINE_SCRIPT_DIR = Path(__file__).parent
 EXECUTABLE_DIR = Path(__file__).parent / "exe"
 
-def run_casa_applycal(input_ms, gaintable):
+def run_casa_applycal(input_ms, output_ms, gaintable):
     """Apply CASA bandpass calibration"""
     print(f"Step : CASA applycal - {input_ms}")
     start_time = time.time()
     try:
-        subprocess.run(["python3", str(EXECUTABLE_DIR / "flagant_applybp.py"), str(input_ms), str(gaintable)], check=True)
+        subprocess.run(["python3", str(EXECUTABLE_DIR / "flagant_applybp.py"), str(input_ms), str(output_ms), str(gaintable)], check=True)
         elapsed = time.time() - start_time
         print(f"✓ CASA applycal completed ({elapsed:.1f}s)")
     except subprocess.CalledProcessError as e:
         elapsed = time.time() - start_time
-        print(f"✗ CASA applycal failed after {elapsed:.1f}s: {e}")
+        print(f"✗ CASA applycal failed after {elapsed:.1f}s: {e.stdout}")
         sys.exit(1)
 
 def run_dp3_flag_avg(input_ms, output_ms, strategy_file=None):
@@ -234,6 +234,8 @@ def phaseshift_to_sun(ms_file, output_ms):
     # Create parset content - use simple filenames
     parset_content = f"""msin={str(ms_path)}
         msout={str(output_path)}
+        showprogress=False
+        verbosity="quiet"
         steps=[phaseshift]
         phaseshift.type=phaseshift
         phaseshift.phasecenter=[{sun_ra}deg,{sun_dec}deg]
@@ -262,7 +264,9 @@ def run_dp3_avg(input_ms, output_ms, freq_step=4):
     
     parset_content = f"""msin={str(input_path)}
         msout={str(output_path)}
-        steps=[avg]
+        steps=[avg]        
+        showprogress=False
+        verbosity="quiet"
         avg.type=averager
         avg.freqstep={freq_step}
         """
@@ -286,6 +290,7 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
     data_dir = raw_path.parent
     
     # Define intermediate file paths
+    applied_bp_ms = data_dir / f"{raw_path.stem}_applied_bp.ms"
     flagged_avg_ms = data_dir / f"{raw_path.stem}_flagged_avg.ms"
     solution_file = data_dir / f"{output_prefix}_solution.h5"
     final_ms = data_dir / f"{raw_path.stem}_{output_prefix}_final.ms"
@@ -299,10 +304,10 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
     print("="*60)
 
     # Step 1: casatools applycal
-    run_casa_applycal(raw_ms, gaintable )
+    run_casa_applycal(raw_ms, str(applied_bp_ms), gaintable)
     
     # Step 2: DP3 flagging and averaging, assuming corrected data column exists
-    run_dp3_flag_avg(raw_ms, flagged_avg_ms, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_sun_PZ.lua")
+    run_dp3_flag_avg(applied_bp_ms, flagged_avg_ms, strategy_file=PIPELINE_SCRIPT_DIR / "lua" / "LWA_sun_PZ.lua")
 
     if rm_ms_tmp:
         shutil.rmtree(raw_ms)
