@@ -7,6 +7,7 @@ import subprocess, sys, os
 import time
 from pathlib import Path
 import shutil
+import argparse
 import wsclean_imaging
 from source_list import get_time_mjd, get_Sun_RA_DEC, mask_far_Sun_sources
 
@@ -282,7 +283,7 @@ def run_dp3_avg(input_ms, output_ms, freq_step=4):
         print(f"✗ DP3 frequency averaging failed after {elapsed:.1f}s: {e}")
         sys.exit(1)
 
-def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False, rm_ms_tmp=False, DEBUG=False):
+def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=False, rm_ms_tmp=False, DEBUG=False, fch_img=True, mfs_img=False):
     """Run complete processing pipeline"""
     
     pipeline_start = time.time()
@@ -361,20 +362,25 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
     print(f"Pipeline completed successfully! (Total time: {total_elapsed:.1f}s)")
     print("="*60)
 
-
-
-    time_start = time.time()
     default_wscleancmd = "wsclean -j 8 -mem 6 -quiet -no-dirty -no-update-model-required \
         -horizon-mask 5deg -size 512 512 -scale 1.5arcmin -weight briggs -0.5 -minuv-l 10 \
-        -auto-threshold 3 -name " + f"{output_prefix}_fch_avg" + " -niter 6000 \
-        -mgain 0.9 -beam-fitting-size 2 -pol I"
-
+        -auto-threshold 3 -name " + f"{output_prefix}_fch_" + " -niter 6000 \
+        -mgain 0.9 -beam-fitting-size 2 -pol I "
     import shlex
-    wscleancmd = default_wscleancmd + " -join-channels -channels-out 12 " + str(shifted_ms_avg)
-    subprocess.run(shlex.split(wscleancmd), check=True, capture_output=True, text=True)
 
-    total_elapsed = time.time() - time_start
-    print(f"✓ WSClean imaging completed ({total_elapsed:.1f}s): {output_prefix}_final_img*.fits")
+    if fch_img:
+        time_start = time.time()
+        wscleancmd = default_wscleancmd + " -join-channels -channels-out 12 " + str(shifted_ms_avg)
+        subprocess.run(shlex.split(wscleancmd), check=True, capture_output=True, text=True)
+        total_elapsed = time.time() - time_start
+        print(f"✓ WSClean imaging completed ({total_elapsed:.1f}s): {output_prefix}_fch_*.fits")
+
+    if mfs_img:
+        time_start = time.time()
+        wscleancmd = default_wscleancmd + str(shifted_ms_avg)
+        subprocess.run(shlex.split(wscleancmd), check=True, capture_output=True, text=True)
+        total_elapsed = time.time() - time_start
+        print(f"✓ WSClean imaging completed ({total_elapsed:.1f}s): {output_prefix}_mfs_*.fits")
 
     if DEBUG:
         run_wsclean_imaging(subtracted_ms, str(data_dir / f"{output_prefix}_image_source_masked_subtracted"), niter=5000, mgain=0.9,horizon_mask=0.1)
@@ -392,22 +398,46 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="LWA Quick Processing Pipeline: raw MS -> CASA applycal -> DP3 flag/avg -> wsclean -> gaincal -> applycal",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     
-    raw_ms = sys.argv[1]
-    gaintable = sys.argv[2]
+    # Positional arguments
+    parser.add_argument("raw_ms", type=str, 
+                        help="Input raw measurement set path")
+    parser.add_argument("gaintable", type=str, 
+                        help="Calibration table path (bandpass calibration)")
+    parser.add_argument("output_prefix", type=str, nargs='?', default=None,
+                        help="Output file prefix (default: derived from input MS filename)")
+    
+    # Optional arguments
+    parser.add_argument("--keep-ms-tmp", action="store_true", default=False,
+                        help="Keep temporary measurement sets (default: remove them)")
+    parser.add_argument("--fch-img", action="store_true", default=False,
+                        help="Generate per-channel images")
+    parser.add_argument("--mfs-img", action="store_true", default=False,
+                        help="Generate multi-frequency synthesis image")
+    
+    args = parser.parse_args()
     
     # Validate inputs
-    if not Path(raw_ms).exists():
-        print(f"Error: Raw MS not found: {raw_ms}")
+    if not Path(args.raw_ms).exists():
+        print(f"Error: Raw MS not found: {args.raw_ms}")
         sys.exit(1)
     
-    if not Path(gaintable).exists():
-        print(f"Error: Gaintable not found: {gaintable}")
-        sys.exit(1)    
-
-    output_prefix = sys.argv[3] if len(sys.argv) > 3 else (Path(raw_ms)).stem.split('.')[0]
-
-    run_calib_pipeline(raw_ms, gaintable, output_prefix, plot_mid_steps=False, rm_ms_tmp=True, DEBUG=False)
+    if not Path(args.gaintable).exists():
+        print(f"Error: Gaintable not found: {args.gaintable}")
+        sys.exit(1)
+    
+    # Determine output prefix
+    if args.output_prefix is None:
+        args.output_prefix = Path(args.raw_ms).stem.split('.')[0]
+    
+    # Run the pipeline
+    run_calib_pipeline( args.raw_ms,  args.gaintable,  args.output_prefix, 
+        plot_mid_steps=False,  rm_ms_tmp=not args.keep_ms_tmp,  DEBUG=False,  
+        fch_img=args.fch_img,  mfs_img=args.mfs_img)
 
 if __name__ == "__main__":
     main()
