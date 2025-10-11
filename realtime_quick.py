@@ -1,6 +1,9 @@
 import os, shutil, time, subprocess
 import config
 import uuid
+import glob
+
+from plot_solar_image import plot_solar_image
 
 
 def get_newest_file(data_dir="/lustre/pipeline/slow/69MHz"):
@@ -61,51 +64,71 @@ def get_caltable_by_freqname(caltable_dir, freq="69MHz"):
 
 
 if __name__ == "__main__":
-    fname_to_proc = get_newest_file(config.data_root)
-    caltable_file = get_caltable_by_freqname(config.caltable_root, config.band_proc)
-    print("data:", fname_to_proc, "caltable:", caltable_file)
 
-    # make a very unique dir inside proc_root with uuid and fname_to_proc
-    proc_dir = os.path.join(config.proc_root, str(uuid.uuid4().hex[:10]))
-    os.makedirs(proc_dir)
-    print("proc_dir:", proc_dir)
+    print("realtime_quick.py started")
+    while True:
+        try:
+        # prepare data and caltable
+            fname_to_proc = get_newest_file(config.data_root)
+            caltable_file = get_caltable_by_freqname(config.caltable_root, config.band_proc)
+            print("data:", fname_to_proc, "caltable:", caltable_file)
 
-    # make proc_dir/caltable/ and proc_dir/slow/ dir
-    os.makedirs(os.path.join(proc_dir, "caltable"))
-    os.makedirs(os.path.join(proc_dir, "slow"))
+            # make a very unique dir inside proc_root with uuid and fname_to_proc
+            proc_dir = os.path.join(config.proc_root, str(uuid.uuid4().hex[:10]))
+            os.makedirs(proc_dir)
+            print("proc_dir:", proc_dir)
 
-    # wait for 5 seconds for the file to finish writing
-    time.sleep(5)
-    shutil.copytree(caltable_file, os.path.join(proc_dir, "caltable", os.path.basename(caltable_file)))
-    shutil.copytree(fname_to_proc, os.path.join(proc_dir, "slow", os.path.basename(fname_to_proc)))
-    print("copied files to proc_dir:", proc_dir)
+            # make proc_dir/caltable/ and proc_dir/slow/ dir
+            os.makedirs(os.path.join(proc_dir, "caltable"))
+            os.makedirs(os.path.join(proc_dir, "slow"))
 
-    #run_calib_pipeline(os.path.join(proc_dir, "slow", os.path.basename(fname_to_proc)), 
-    #            os.path.join(proc_dir, "caltable", os.path.basename(caltable_file)), 
-    #            os.path.basename(fname_to_proc).split('.')[0],
-   #             plot_mid_steps=False, rm_ms_tmp=True, DEBUG=False, fch_img=False, mfs_img=True)
+            # wait for 5 seconds for the file to finish writing
+            time.sleep(5)
+            shutil.copytree(caltable_file, os.path.join(proc_dir, "caltable", os.path.basename(caltable_file)))
+            shutil.copytree(fname_to_proc, os.path.join(proc_dir, "slow", os.path.basename(fname_to_proc)))
+            print("copied files to proc_dir:", proc_dir)
+        except Exception as e:
+            print(e)
+            time.sleep(5)
+            continue
 
-    run_cmd = f"""podman run --rm -it \
-        -v /fast/peijinz/agile_proc/lwa-quick-proc-image:/lwasoft:ro \
-        -v {proc_dir}:/data:rw \
-        -w /data \
-        peijin/lwa-solar-pipehost:v202510 \
-        python3 /lwasoft/pipeline_quick_proc_img.py \
-          /data/slow/{os.path.basename(fname_to_proc)} \
-          /data/caltable/{os.path.basename(caltable_file)} --mfs-img \
-        > {proc_dir}/proc.log"""
+        try:
+        # run the pipeline
+            run_cmd = f"""podman run --rm -it \
+                -v /fast/peijinz/agile_proc/lwa-quick-proc-image:/lwasoft:ro \
+                -v {proc_dir}:/data:rw \
+                -w /data \
+                peijin/lwa-solar-pipehost:v202510 \
+                python3 /lwasoft/pipeline_quick_proc_img.py \
+                /data/slow/{os.path.basename(fname_to_proc)} \
+                /data/caltable/{os.path.basename(caltable_file)} --mfs-img \
+                > {proc_dir}/proc.log"""
 
-    print(run_cmd)
+            start_time = time.time()
+            subprocess.run(run_cmd, shell=True, check=True)
+            end_time = time.time()
+            print(f"time taken: {end_time - start_time} seconds")
 
-    start_time = time.time()
-    subprocess.run(run_cmd, shell=True, check=True)
+            # find proc_dir/slow/*mfs-image.fits
+            mfs_image_file = glob.glob(os.path.join(proc_dir, "slow", "*mfs-image.fits"))[0]
+            plt_name = plot_solar_image(mfs_image_file)
 
-    end_time = time.time()
-    print(f"time taken: {end_time - start_time} seconds")
+            # copy image to dest_dir
+            shutil.copy(mfs_image_file, os.path.join(config.dest_dir, os.path.basename(mfs_image_file)))
+            shutil.copy(plt_name, os.path.join(config.dest_dir, os.path.basename(plt_name)))
 
-    # remove proc_dir
-    #shutil.rmtree(proc_dir)
-    #print("removed proc_dir:", proc_dir)
-    
+            print("processed:", mfs_image_file, " UT now:", time.strftime("%Y-%m-%d %H:%M:%S"))
+
+            # remove tree proc_dir
+
+        except Exception as e:
+            print(e)
+            time.sleep(5)
+            continue
+
+        # remove proc_dir
+        #shutil.rmtree(proc_dir)
+        #print("removed proc_dir:", proc_dir)
+        
     exit(0)
     

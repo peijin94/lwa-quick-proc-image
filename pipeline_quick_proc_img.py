@@ -364,23 +364,22 @@ def run_calib_pipeline(raw_ms, gaintable, output_prefix="proc", plot_mid_steps=F
 
     default_wscleancmd = "wsclean -j 8 -mem 6 -quiet -no-dirty -no-update-model-required \
         -horizon-mask 5deg -size 512 512 -scale 1.5arcmin -weight briggs -0.5 -minuv-l 10 \
-        -auto-threshold 3 -name " + f"{output_prefix}_fch_" + " -niter 6000 \
-        -mgain 0.9 -beam-fitting-size 2 -pol I "
+        -auto-threshold 3  -niter 6000 -mgain 0.9 -beam-fitting-size 2 -pol I "
     import shlex
 
     if fch_img:
         time_start = time.time()
-        wscleancmd = default_wscleancmd + " -join-channels -channels-out 12 " + str(shifted_ms_avg)
+        wscleancmd = default_wscleancmd + " -join-channels -channels-out 12 -name " + f"{output_prefix}_fch " + str(shifted_ms_avg)
         subprocess.run(shlex.split(wscleancmd), check=True, capture_output=True, text=True)
         total_elapsed = time.time() - time_start
-        print(f"✓ WSClean imaging completed ({total_elapsed:.1f}s): {output_prefix}_fch_*.fits")
+        print(f"✓ WSClean imaging completed ({total_elapsed:.1f}s): {output_prefix}_fch*.fits")
 
     if mfs_img:
         time_start = time.time()
-        wscleancmd = default_wscleancmd + str(shifted_ms_avg)
+        wscleancmd = default_wscleancmd + " -name " + f"{output_prefix}_mfs " + str(shifted_ms_avg)
         subprocess.run(shlex.split(wscleancmd), check=True, capture_output=True, text=True)
         total_elapsed = time.time() - time_start
-        print(f"✓ WSClean imaging completed ({total_elapsed:.1f}s): {output_prefix}_mfs_*.fits")
+        print(f"✓ WSClean imaging completed ({total_elapsed:.1f}s): {output_prefix}_mfs*.fits")
 
     if DEBUG:
         run_wsclean_imaging(subtracted_ms, str(data_dir / f"{output_prefix}_image_source_masked_subtracted"), niter=5000, mgain=0.9,horizon_mask=0.1)
