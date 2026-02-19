@@ -11,6 +11,11 @@ from solarpipeworker import load_params, run_job
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run solarpipeworker job")
     parser.add_argument("--data-file", required=True, help="Input measurement set (.ms) path")
+    parser.add_argument(
+        "--gaintable-file",
+        default=None,
+        help="Calibration table (.bcal) path. Overrides params file when provided.",
+    )
     parser.add_argument("--runtime-dir", required=True, help="Root runtime directory")
     parser.add_argument("--params", default="params_input.json", help="Path to params JSON")
     parser.add_argument(
@@ -21,6 +26,8 @@ def main() -> int:
     args = parser.parse_args()
 
     params = load_params(args.params)
+    if args.gaintable_file:
+        params = replace(params, gaintable_file=args.gaintable_file)
     if args.cleanup_on_success:
         params = replace(params, cleanup_on_success=True)
 

@@ -1,15 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import astropy.units as u
 from astropy.coordinates import EarthLocation, SkyCoord, get_body
 from astropy.time import Time
-
-try:
-    from casatools import table
-except Exception:  # pragma: no cover - optional dependency in unit tests
-    table = None
 
 
 def parse_wsclean_coordinates(ra_str: str, dec_str: str) -> SkyCoord:
@@ -63,13 +59,21 @@ def distance_to_src_list(
 
 
 def get_time_mjd(msname: str | Path) -> float:
-    if table is None:
-        raise RuntimeError("casatools is required for reading MS time")
-    tb = table()
-    tb.open(f"{msname}/OBSERVATION")
-    start_mjd = tb.getcol("TIME_RANGE")[0][0] / 86400.0
-    tb.close()
-    return float(start_mjd)
+    """
+    Parse observation time from MS filename.
+
+    Expected filename format: YYYYMMDD_HHMMSS_XXMHz.ms
+    Example: 20260209_210309_36MHz.ms
+    """
+    stem = Path(msname).name
+    if stem.endswith(".ms"):
+        stem = stem[:-3]
+    parts = stem.split("_")
+    if len(parts) < 2:
+        raise ValueError(f"Cannot parse observation time from filename: {Path(msname).name}")
+
+    dt = datetime.strptime(f"{parts[0]}_{parts[1]}", "%Y%m%d_%H%M%S")
+    return float(Time(dt, scale="utc").mjd)
 
 
 def get_sun_ra_dec(time_mjd: float, observatory: str = "OVRO") -> tuple[float, float]:

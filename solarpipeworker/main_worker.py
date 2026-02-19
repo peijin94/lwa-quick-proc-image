@@ -68,8 +68,8 @@ DEFAULT_MAIN_WORKER_CONFIG: dict[str, dict[str, Any]] = {
         "no_dirty": True,
         "no_update_model_required": True,
         "horizon_mask": "5deg",
-        "size": "512 512",
-        "scale": "1.5arcmin",
+        "size": "384 384",
+        "scale": "2arcmin",
         "weight": "briggs -0.5",
         "minuv_l": 10,
         "auto_threshold": 3,
@@ -251,9 +251,29 @@ def _run_casa_applycal(
     gaintable: Path,
     repo_root: Path,
     logger: Any,
+    job_dir: Path,
+    image: str,
 ) -> None:
-    script = repo_root / "exe" / "flagant_applybp.py"
-    run_command(["python3", str(script), str(raw_ms), str(output_ms), str(gaintable)], logger)
+    run_command(
+        [
+            "podman",
+            "run",
+            "--rm",
+            "-v",
+            f"{job_dir}:/data:rw",
+            "-v",
+            f"{repo_root}:/lwasoft:ro",
+            "-w",
+            "/data",
+            image,
+            "python3",
+            "/lwasoft/exe/flagant_applybp.py",
+            _in_container(raw_ms),
+            _in_container(output_ms),
+            _in_container(gaintable),
+        ],
+        logger,
+    )
 
 
 def _run_dp3_flag_avg(
@@ -425,7 +445,15 @@ def _run_pipeline(
 
 
     # step 1: applycal
-    _run_casa_applycal(copied_ms, applied_bp_ms, copied_gaintable, repo_root, logger)
+    _run_casa_applycal(
+        copied_ms,
+        applied_bp_ms,
+        copied_gaintable,
+        repo_root,
+        logger,
+        job_dir=data_dir,
+        image=params.container_image,
+    )
 
     # step 2: flagavg
     _run_dp3_flag_avg(
@@ -448,6 +476,7 @@ def _run_pipeline(
         image=params.container_image,
         **selfcal_wsclean_cfg,
     )
+    
     # step 4: selfcal_gaincal
     _run_gaincal(
         current_ms,
