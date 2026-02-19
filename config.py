@@ -1,6 +1,8 @@
-proc_root  = "/fast/peijinz/agile_proc/realtime"
-band_proc = "69MHz"
-data_root  = "/lustre/pipeline/slow/" + band_proc
-caltable_root = "/fast/solarpipe/caltables/"
+from pathlib import Path
 
-dest_dir = "/fast/peijinz/agile_proc/realtime_collect"
+_REPO_DIR = Path(__file__).resolve().parent
+_PIPEDEV_DIR = _REPO_DIR.parent
+
+proc_root = str(_PIPEDEV_DIR / "runtime_dir" / "realtime")
+caltable_root = str(_PIPEDEV_DIR / "caltables_latest")
+dest_dir = str(_PIPEDEV_DIR / "runtime_dir" / "realtime_collect")

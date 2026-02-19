@@ -26,6 +26,9 @@ print_status() {
 # Track test results
 PASS_COUNT=0
 FAIL_COUNT=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PIPEDEV_DIR="$(cd "${REPO_DIR}/.." && pwd)"
 
 echo "=== Testing astronrd/linc Container ==="
 echo ""
@@ -159,18 +162,18 @@ fi
 # Test with actual data directory if it exists
 echo ""
 echo "9. Testing with testdata directory and performance..."
-if [ -d "/fast/peijinz/agile_proc/testdata" ]; then
+if [ -d "${PIPEDEV_DIR}/slow_data" ]; then
     echo "   Starting data access test..."
     START_TIME=$(date +%s.%N)
-    if podman run --rm -v "/fast/peijinz/agile_proc/testdata:/data" astronrd/linc:latest ls -la /data &> /dev/null; then
+    if podman run --rm -v "${PIPEDEV_DIR}/slow_data:/data:ro" astronrd/linc:latest ls -la /data &> /dev/null; then
         END_TIME=$(date +%s.%N)
         DURATION=$(echo "$END_TIME - $START_TIME" | bc -l)
-        print_status "PASS" "Can access testdata directory from container (${DURATION}s)"
+        print_status "PASS" "Can access slow_data directory from container (${DURATION}s)"
         ((PASS_COUNT++))
         
         # Check if MS file exists
-        if [ -d "/fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz.ms" ]; then
-            print_status "PASS" "Measurement set found: /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz.ms"
+        if [ -d "${PIPEDEV_DIR}/slow_data/20260209_210309_55MHz.ms" ]; then
+            print_status "PASS" "Measurement set found: ${PIPEDEV_DIR}/slow_data/20260209_210309_55MHz.ms"
             ((PASS_COUNT++))
         else
             print_status "INFO" "Measurement set not found at expected location"
@@ -178,11 +181,11 @@ if [ -d "/fast/peijinz/agile_proc/testdata" ]; then
     else
         END_TIME=$(date +%s.%N)
         DURATION=$(echo "$END_TIME - $START_TIME" | bc -l)
-        print_status "FAIL" "Cannot access testdata directory from container (${DURATION}s)"
+        print_status "FAIL" "Cannot access slow_data directory from container (${DURATION}s)"
         ((FAIL_COUNT++))
     fi
 else
-    print_status "INFO" "testdata directory not found at /fast/peijinz/agile_proc/testdata, skipping data access test"
+    print_status "INFO" "slow_data directory not found at ${PIPEDEV_DIR}/slow_data, skipping data access test"
 fi
 
 
@@ -199,7 +202,7 @@ if [ $FAIL_COUNT -eq 0 ]; then
     echo ""
     echo "Next steps:"
     echo "1. Run the self-calibration pipeline: ./run_selfcal.sh"
-    echo "2. Or test with Python directly: python3 selfcal_pipeline.py /fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz.ms"
+    echo "2. Or test with Python directly: python3 selfcal_pipeline.py ${PIPEDEV_DIR}/slow_data/20260209_210309_55MHz.ms"
 else
     print_status "FAIL" "Some tests failed. Please check the errors above."
     echo ""

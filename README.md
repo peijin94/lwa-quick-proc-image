@@ -1,70 +1,114 @@
-# LWA Quick Processing Pipeline
+# solarpipeworker
 
-A streamlined pipeline for processing LWA (Long Wavelength Array) radio astronomy data from raw measurement sets to calibrated solar images.
+Refactored LWA quick processing pipeline with a sandboxed runtime workflow.
 
-## Overview
+## What Changed
 
-This pipeline processes LWA measurement sets through the following steps:
-1. **CASA bandpass calibration** - Apply pre-computed calibration tables
-2. **DP3 flagging & averaging** - RFI flagging and frequency averaging  
-3. **WSClean imaging** - Generate initial images and fill MODEL_DATA column
-4. **DP3 gain calibration** - Phase and amplitude self-calibration
-5. **Source subtraction** - Remove bright sources and phase-shift to Sun coordinates
-6. **Solar imaging** - Generate final solar radio images
+The repository now exposes a real Python package, `solarpipeworker`, with a stable API:
 
-## Quick Start
+- `solarpipeworker.main_worker.run_job(...)`
+- `solarpipeworker.main_worker.load_params(...)`
 
-```bash
-python3 pipeline_quick_proc_img.py \
-    /path/to/raw.ms \
-    /path/to/bandpass.bcal \
-    output_prefix
-```
+Each run executes in a dedicated UUID sandbox directory:
+
+- `<runtime_dir>/<uuid4>/`
+
+The input MS and calibration table are copied into that job directory and processing runs only there.
+
+## Repository Layout
+
+- `solarpipeworker/`
+  - `main_worker.py` (main orchestration)
+  - `utils.py` (job dir, copy, logging, subprocess helpers)
+  - `visualization.py` (FITS plotting)
+  - `source_list.py` (Sun/source utilities)
+  - `lua/LWA_sun_PZ.lua`
+- `run_worker.py` (recommended CLI harness)
+- `params_input.json` (default worker parameters)
+- `pipeline_quick_proc_img.py` (legacy compatibility wrapper)
 
 ## Requirements
 
-- **Podman** for containerized DP3/WSClean operations
-- **astronrd/linc:latest** container image
+- Python 3.10+
+- CASA/DP3/WSClean runtime dependencies available in environment/container
+- Python packages listed in `pyproject.toml`
 
+Optional dev tools:
 
-## Output Files
+- `pytest`
+- `ruff`
 
-The pipeline generates:
-- **Calibrated MS**: `*_final.ms` - Final calibrated measurement set
-- **Solution files**: `solution.h5` - DP3 calibration solutions  
-- **FITS images**: `*image*.fits` - Radio images at various stages
-- **Solar plots**: `*_plot.png` - Final solar image visualizations
-
-## Configuration
-
-Key parameters in `pipeline_quick_proc_img.py`:
-- `niter=800` - WSClean iterations for initial imaging for selfcal
-- `mgain=0.9` - Major cycle gain (must be < 1.0)
-- `distance_deg=8.0` - Sun masking radius for source subtraction
-- `horizon_mask=0.1` - Horizon masking in degrees
-
-## Container Usage
-
-All DP3 and WSClean operations use the `astronrd/linc:latest` container with simplified mounting:
+## Install (editable)
 
 ```bash
-# Test container setup
-podman pull astronrd/linc:latest
-
-# DP3 operations write parset files directly to data directory
-# No /config mount needed - runs from /data working directory
+python3 -m pip install -e .
 ```
 
-## Visualization Tools
+## Run Worker (Recommended)
 
 ```bash
-# Plot solar image with statistics
-python3 plot_solar_image.py solar_image.fits
-
-# Overlay sources on FITS image  
-python3 script/plot_fits_with_sources.py image.fits sources.txt
-
-# Plot calibration solutions
-python3 script/plot_solutions.py solution.h5
+python3 run_worker.py \
+  --data-file /home/pjzhang/dev/pipedev/slow_data/20260209_210309_64MHz.ms \
+  --runtime-dir /home/pjzhang/dev/pipedev/runtime_dir \
+  --params params_input.json
 ```
 
+Outputs:
+
+- `job_dir/job.log`
+- `job_dir/summary.json`
+- Pipeline artifacts (`.ms`, `.fits`, `.png`, `.h5`, `.txt`) in `job_dir`
+
+## Public API Example
+
+```python
+from solarpipeworker import load_params, run_job
+
+params = load_params("params_input.json")
+result = run_job(
+    data_file="/home/pjzhang/dev/pipedev/slow_data/20260209_210309_64MHz.ms",
+    runtime_dir="/home/pjzhang/dev/pipedev/runtime_dir",
+    params=params,
+)
+
+print(result.success, result.job_dir)
+```
+
+## Legacy Compatibility CLI
+
+`pipeline_quick_proc_img.py` remains as a compatibility wrapper and forwards execution to `run_job`.
+
+```bash
+python3 pipeline_quick_proc_img.py \
+  /path/to/raw.ms \
+  /path/to/bandpass.bcal \
+  output_prefix \
+  --mfs-img
+```
+
+## Parameters
+
+`params_input.json` fields:
+
+- `gaintable_file` (required)
+- `container_image` (default: `peijin/lwa-solar-pipehost:v202510`)
+- `output_prefix`
+- `keep_ms_tmp`
+- `fch_img`
+- `mfs_img`
+- `debug`
+- `plot_mid_steps`
+- `cleanup_on_success`
+- `strategy_file`
+
+## Tests
+
+```bash
+python3 -m pytest -q tests/test_worker_basics.py
+```
+
+## Notes
+
+- Original input MS is never modified in-place.
+- All intermediate and output files are isolated per job.
+- `summary.json` is always written, including failure details when a run fails.

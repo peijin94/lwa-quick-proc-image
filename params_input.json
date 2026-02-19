@@ -1,0 +1,77 @@
+{
+  "main_worker": {
+    "global": {
+      "gaintable_file": "/home/pjzhang/dev/pipedev/caltables_latest/20251223_030331_64MHz.bcal",
+      "container_image": "peijin/lwa-solar-pipehost:v202510",
+      "output_prefix": null,
+      "keep_ms_tmp": false,
+      "fch_img": true,
+      "mfs_img": true,
+      "debug": false,
+      "plot_mid_steps": false,
+      "cleanup_on_success": false,
+      "strategy_file": null
+    },
+    "flagavg_dp3": {
+      "avg_freqstep": 4
+    },
+    "selfcal_fullsky_wsclean": {
+      "niter": 800,
+      "mgain": 0.9,
+      "horizon_mask": 5,
+      "save_source_list": false,
+      "auto_mask": false,
+      "auto_threshold": false
+    },
+    "selfcal_gaincal": {
+      "solint": 0,
+      "caltype": "diagonalphase",
+      "uvlambdamin": 30,
+      "maxiter": 500,
+      "tolerance": 1e-05,
+      "usemodelcolumn": true,
+      "modelcolumn": "MODEL_DATA"
+    },
+    "selfcal_applycal": {
+      "cal_entry_lst": [
+        "phase"
+      ]
+    },
+    "subtract_sources_wsclean": {
+      "niter": 1500,
+      "mgain": 0.9,
+      "horizon_mask": 0.1
+    },
+    "mask_far_sun_sources": {
+      "distance_deg": 6.0
+    },
+    "subtract_sources_dp3": {},
+    "phaseshift_to_sun": {},
+    "final_avg_dp3": {
+      "freq_step": 4
+    },
+    "final_wsclean": {
+      "j": 8,
+      "mem": 6,
+      "quiet": true,
+      "no_dirty": true,
+      "no_update_model_required": true,
+      "horizon_mask": "5deg",
+      "size": "512 512",
+      "scale": "1.5arcmin",
+      "weight": "briggs -0.5",
+      "minuv_l": 10,
+      "auto_threshold": 3,
+      "niter": 6000,
+      "mgain": 0.9,
+      "beam_fitting_size": 2,
+      "pol": "I",
+      "channels_out": 12
+    },
+    "debug_subtracted_wsclean": {
+      "niter": 5000,
+      "mgain": 0.9,
+      "horizon_mask": 0.1
+    }
+  }
+}

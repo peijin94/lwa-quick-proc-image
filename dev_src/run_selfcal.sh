@@ -1,12 +1,18 @@
 #!/bin/bash
 # Simple wrapper script to run the self-calibration pipeline
 
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PIPEDEV_DIR="$(cd "${REPO_DIR}/.." && pwd)"
+
 # Default values
-MS_PATH="/fast/peijinz/agile_proc/testdata/slow/20240519_173002_55MHz.ms"
-OUTPUT_DIR="./selfcal_output"
+MS_PATH="${PIPEDEV_DIR}/slow_data/20260209_210309_55MHz.ms"
+OUTPUT_DIR="${PIPEDEV_DIR}/runtime_dir/selfcal_output"
 ITERATIONS=""
 LOG_LEVEL="INFO"
-CONFIG_FILE="selfcal_config.yml"
+CONFIG_FILE="${SCRIPT_DIR}/selfcal_config.yml"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -61,6 +67,18 @@ if ! command -v podman &> /dev/null; then
     exit 1
 fi
 
+if ! command -v python3 &> /dev/null; then
+    echo "Error: python3 is not installed."
+    exit 1
+fi
+
+if command -v conda &> /dev/null; then
+    if ! conda env list | awk '{print $1}' | grep -qx "lwa"; then
+        echo "Error: conda environment 'lwa' not found."
+        exit 1
+    fi
+fi
+
 echo "Starting self-calibration pipeline..."
 echo "Input MS: $MS_PATH"
 echo "Output directory: $OUTPUT_DIR"
@@ -70,7 +88,7 @@ echo "Config file: $CONFIG_FILE"
 echo ""
 
 # Run the Python pipeline
-PYTHON_CMD="python3 selfcal_pipeline.py \"$MS_PATH\" --output-dir \"$OUTPUT_DIR\" --log-level \"$LOG_LEVEL\" --config \"$CONFIG_FILE\""
+PYTHON_CMD="python3 \"${SCRIPT_DIR}/selfcal_pipeline.py\" \"$MS_PATH\" --output-dir \"$OUTPUT_DIR\" --log-level \"$LOG_LEVEL\" --config \"$CONFIG_FILE\""
 
 # Add iterations parameter only if specified
 if [[ -n "$ITERATIONS" ]]; then

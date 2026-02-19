@@ -7,6 +7,7 @@ Uses default parameters optimized for LWA data processing
 import subprocess
 import sys
 import os
+import shutil
 from pathlib import Path
 
 def run_wsclean_imaging(input_ms, output_prefix="image"):
@@ -76,6 +77,10 @@ def run_wsclean_imaging(input_ms, output_prefix="image"):
     print(f"Output prefix: {output_prefix}")
     print(f"Image size: {size}x{size}")
     
+    if not shutil.which("podman"):
+        print("Error: podman is required but not found in PATH")
+        sys.exit(1)
+
     # Prepare podman command
     input_dir = input_path.parent
     output_dir = input_dir  # Output to same directory as MS file
@@ -109,8 +114,10 @@ def run_wsclean_imaging(input_ms, output_prefix="image"):
 def main():
     """Main function"""
     if len(sys.argv) < 2:
+        repo_dir = Path(__file__).resolve().parents[1]
+        pipedev_dir = repo_dir.parent
         print("Usage: python3 run_wsclean_imaging.py <input_ms> [output_prefix]")
-        print("Example: python3 run_wsclean_imaging.py /fast/peijinz/agile_proc/testdata/slow/flagged_avg.ms")
+        print(f"Example: python3 run_wsclean_imaging.py {pipedev_dir / 'slow_data' / '20260209_210309_69MHz.ms'}")
         sys.exit(1)
     
     input_ms = sys.argv[1]

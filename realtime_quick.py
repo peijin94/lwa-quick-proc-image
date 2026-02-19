@@ -1,3 +1,4 @@
+import argparse
 import os, shutil, time, subprocess
 import config
 import uuid
@@ -6,12 +7,12 @@ import glob
 from plot_solar_image import plot_solar_image
 
 
-def get_newest_file(data_dir="/lustre/pipeline/slow/69MHz"):
+def get_newest_file(data_dir):
     """
     Get the newest file from the nested directory structure.
     
     Args:
-        data_dir: Base directory path (default: "/lustre/pipeline/slow/69MHz")
+        data_dir: Base directory path
     
     Returns:
         Full path to the newest file
@@ -64,13 +65,36 @@ def get_caltable_by_freqname(caltable_dir, freq="69MHz"):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run realtime quick processing loop.")
+    parser.add_argument(
+        "--data-root",
+        required=True,
+        help="Base slow-data directory for the selected band, e.g. ../slow_data",
+    )
+    parser.add_argument(
+        "--band-proc",
+        required=True,
+        help='Band label used to select caltable files, e.g. "69MHz"',
+    )
+    args = parser.parse_args()
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
+
+    if shutil.which("podman") is None:
+        raise RuntimeError("podman is required but not found in PATH")
+    if not os.path.isdir(args.data_root):
+        raise FileNotFoundError(f"data root does not exist: {args.data_root}")
+    if not os.path.isdir(config.caltable_root):
+        raise FileNotFoundError(f"caltable root does not exist: {config.caltable_root}")
+
+    os.makedirs(config.proc_root, exist_ok=True)
+    os.makedirs(config.dest_dir, exist_ok=True)
 
     print("realtime_quick.py started")
     while True:
         try:
         # prepare data and caltable
-            fname_to_proc = get_newest_file(config.data_root)
-            caltable_file = get_caltable_by_freqname(config.caltable_root, config.band_proc)
+            fname_to_proc = get_newest_file(args.data_root)
+            caltable_file = get_caltable_by_freqname(config.caltable_root, args.band_proc)
             print("data:", fname_to_proc, "caltable:", caltable_file)
 
             # make a very unique dir inside proc_root with uuid and fname_to_proc
@@ -94,18 +118,28 @@ if __name__ == "__main__":
 
         try:
         # run the pipeline
-            run_cmd = f"""podman run --rm -it \
-                -v /fast/peijinz/agile_proc/lwa-quick-proc-image:/lwasoft:ro \
-                -v {proc_dir}:/data:rw \
-                -w /data \
-                peijin/lwa-solar-pipehost:v202510 \
-                python3 /lwasoft/pipeline_quick_proc_img.py \
-                /data/slow/{os.path.basename(fname_to_proc)} \
-                /data/caltable/{os.path.basename(caltable_file)} --mfs-img \
-                > {proc_dir}/proc.log"""
+            run_cmd = [
+                "podman",
+                "run",
+                "--rm",
+                "-t",
+                "-v",
+                f"{repo_dir}:/lwasoft:ro",
+                "-v",
+                f"{proc_dir}:/data:rw",
+                "-w",
+                "/data",
+                "peijin/lwa-solar-pipehost:v202510",
+                "python3",
+                "/lwasoft/pipeline_quick_proc_img.py",
+                f"/data/slow/{os.path.basename(fname_to_proc)}",
+                f"/data/caltable/{os.path.basename(caltable_file)}",
+                "--mfs-img",
+            ]
 
             start_time = time.time()
-            subprocess.run(run_cmd, shell=True, check=True)
+            with open(os.path.join(proc_dir, "proc.log"), "w", encoding="utf-8") as proc_log:
+                subprocess.run(run_cmd, check=True, stdout=proc_log, stderr=subprocess.STDOUT)
             end_time = time.time()
             print(f"time taken: {end_time - start_time} seconds")
 

@@ -2,17 +2,27 @@
 # Minimal script to run wsclean imaging with optimized LWA parameters
 # Usage: ./wsclean_imaging.sh input.ms [output_prefix]
 
-INPUT_MS="$1"
-OUTPUT_PREFIX="${2:-image}"
+set -euo pipefail
 
 if [ $# -lt 1 ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+    PIPEDEV_DIR="$(cd "${REPO_DIR}/.." && pwd)"
     echo "Usage: $0 <input_ms> [output_prefix]"
-    echo "Example: $0 /fast/peijinz/agile_proc/testdata/slow/flagged_avg.ms lwa_image"
+    echo "Example: $0 ${PIPEDEV_DIR}/slow_data/20260209_210309_69MHz.ms lwa_image"
     exit 1
 fi
 
+INPUT_MS="$1"
+OUTPUT_PREFIX="${2:-image}"
+
 if [ ! -d "$INPUT_MS" ]; then
     echo "Error: Input measurement set not found: $INPUT_MS"
+    exit 1
+fi
+
+if ! command -v podman >/dev/null 2>&1; then
+    echo "Error: podman is required but not found in PATH"
     exit 1
 fi
 
